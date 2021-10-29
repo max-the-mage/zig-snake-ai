@@ -1,0 +1,7 @@
+deps:
+  SDL:
+    root: src/lib.zig
+    src:
+      git:
+        url: "https://github.com/MasterQ32/SDL.zig.git"
+        ref: master

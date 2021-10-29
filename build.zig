@@ -1,4 +1,5 @@
 const std = @import("std");
+const Sdk = @import(".gyro\\SDL.zig-MasterQ32-github.com-4ca8e851\\pkg\\Sdk.zig");
 
 pub fn build(b: *std.build.Builder) void {
     // Standard target options allows the person running `zig build` to choose
@@ -12,8 +13,13 @@ pub fn build(b: *std.build.Builder) void {
     const mode = b.standardReleaseOptions();
 
     const exe = b.addExecutable("zig-snake-ai", "src/main.zig");
+
+    const sdk = Sdk.init(b);
     exe.setTarget(target);
+    sdk.link(exe, .dynamic);
+    exe.addPackage(sdk.getWrapperPackage("sdl2"));
     exe.setBuildMode(mode);
+    exe.linkLibC();
     exe.install();
 
     const run_cmd = exe.run();
