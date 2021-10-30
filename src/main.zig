@@ -213,8 +213,9 @@ pub fn main() !void {
                 snake.dir = if(diff_x < 0) .left else .right;
 
             const start_dir = snake.dir;
+            const left = arena.rand.boolean();
             while (!snake.frontClear()) {    
-                if (arena.rand.boolean()) {
+                if (left) {
                     snake.dir = switch (snake.dir) {
                         .up => .left,
                         .left => .down,
