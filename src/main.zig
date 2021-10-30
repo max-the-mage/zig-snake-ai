@@ -63,11 +63,132 @@ const Snake = struct {
         };
     }
 
+    fn draw(snake: *Snake, renderer: *sdl.Renderer) !void {
+        try renderer.setColorRGB(0x0, 0xf5, 0x0);
+
+        var prev: ?Pos = null;
+
+        //var prev: ?Pos = null;
+        for (snake.items.items) |seg, i| {
+
+            //3/4 of cell size;
+            const cx = (arena.cell_size.w*3)/4;
+            const cy = (arena.cell_size.h*3)/4;
+            const fx = arena.cell_size.w/8;
+            const fy = arena.cell_size.h/8;
+
+            // first, draw the base rect
+            try renderer.fillRect(sdl.Rectangle{
+                .x = @intCast(i32, seg.x*arena.cell_size.w+fx),
+                .y = @intCast(i32, seg.y*arena.cell_size.w+fy),
+                .width = cx,
+                .height = cy,
+            });
+
+            // draw connection to next segment
+            if (i != snake.items.items.len-1) {
+                const next = snake.items.items[i+1];
+
+                const diff_x = @intCast(isize, next.x) - @intCast(isize, seg.x);
+                const diff_y = @intCast(isize, next.y) - @intCast(isize, seg.y);
+
+                var dir_next: Direction = undefined;
+
+                dir_next = switch (diff_x) {
+                    -1 => .left,
+                    1 => .right,
+                    else => .up
+                };
+                if(dir_next != .left and dir_next != .right) {
+                    dir_next = switch (diff_y) {
+                        -1 => .up,
+                        1 => .down,
+                        else => .down,
+                    };
+                }
+
+                const x = switch(dir_next) {
+                    .left => 0,
+                    .up, .down => fx,
+                    .right => fx+cx,
+                };
+                const y = switch(dir_next) {
+                    .up => 0,
+                    .left, .right, => fy,
+                    .down => fy+cy,
+                };
+                const width = switch(dir_next) {
+                    .left, .right => fx,
+                    .up, .down => cx,
+                };
+                const height = switch(dir_next) {
+                    .up, .down => fy,
+                    .left, .right => cy,
+                };
+
+                try renderer.fillRect(sdl.Rectangle{
+                    .x = @intCast(i32, seg.x*arena.cell_size.w+x),
+                    .y = @intCast(i32, seg.y*arena.cell_size.h+y),
+                    .width = @intCast(i32, width),
+                    .height = @intCast(i32, height),
+                });
+            }
+
+            if (prev) |next| {
+
+                const diff_x = @intCast(isize, next.x) - @intCast(isize, seg.x);
+                const diff_y = @intCast(isize, next.y) - @intCast(isize, seg.y);
+
+                var dir_next: Direction = undefined;
+
+                dir_next = switch (diff_x) {
+                    -1 => .left,
+                    1 => .right,
+                    else => .up
+                };
+                if(dir_next != .left and dir_next != .right) {
+                    dir_next = switch (diff_y) {
+                        -1 => .up,
+                        1 => .down,
+                        else => .down,
+                    };
+                }
+
+                const x = switch(dir_next) {
+                    .left => 0,
+                    .up, .down => fx,
+                    .right => fx+cx,
+                };
+                const y = switch(dir_next) {
+                    .up => 0,
+                    .left, .right, => fy,
+                    .down => fy+cy,
+                };
+                const width = switch(dir_next) {
+                    .left, .right => fx,
+                    .up, .down => cx,
+                };
+                const height = switch(dir_next) {
+                    .up, .down => fy,
+                    .left, .right => cy,
+                };
+
+                try renderer.fillRect(sdl.Rectangle{
+                    .x = @intCast(i32, seg.x*arena.cell_size.w+x),
+                    .y = @intCast(i32, seg.y*arena.cell_size.h+y),
+                    .width = @intCast(i32, width),
+                    .height = @intCast(i32, height),
+                });
+            }
+
+            prev = seg;
+        }
+    }
 };
 
 const arena = struct {
-    pub const w: u32 = 50;
-    pub const h: u32 = 50;
+    pub const w: u32 = 30;
+    pub const h: u32 = 30;
     pub const size: u32 = w*h;
     pub const cell_size = .{.w = win.w/w, .h = win.h/h};
     pub var rand: *std.rand.Random = undefined;
@@ -89,44 +210,27 @@ const arena = struct {
     
     pub fn draw(renderer: *sdl.Renderer) !void {
 
-        // draw cells
-        {
-            var x: i32 = 0;
-            var y: i32 = 0;
-
-            while (y < w) : (y += 1) {
-                x = 0;
-                while(x < w) : (x += 1) {
-                    var cell = getCell(@intCast(usize, x), @intCast(usize, y));
-
-                    try switch (cell.*) {
-                        .none => continue,
-                        .snake => renderer.setColorRGB(0x00, 0xf5, 0x00),
-                        .food => renderer.setColorRGB(0xf5, 0x00, 0x00),
-                    };
-                    try renderer.fillRect(sdl.Rectangle{
-                        .x = x*cell_size.w-1,
-                        .y = y*cell_size.h-1,
-                        .width = @intCast(i32, cell_size.w)-1,
-                        .height = @intCast(i32, cell_size.h)-1,
-                    });
-                }
-            }
-        }
+        try renderer.setColorRGB(0xf5, 0x00, 0x00);
+        try renderer.fillRect(sdl.Rectangle{
+            .x = @intCast(i32, apple.x*cell_size.w+(cell_size.w/4)),
+            .y = @intCast(i32, apple.y*cell_size.h+(cell_size.w/4)),
+            .width = @intCast(i32, cell_size.w/2),
+            .height = @intCast(i32, cell_size.h/2),
+        });
 
         // draw lines 
-        // {
-        //     try renderer.setColorRGB(0, 0, 0);
-        //     var c: i32 = 0;
-        //     var r: i32 = 0;
+        {
+            try renderer.setColorRGBA(127, 127, 127, 90);
+            var c: i32 = 0;
+            var r: i32 = 0;
 
-        //     while (c < w+1) : (c += 1) {
-        //         try renderer.drawLine(c*cell_size.w, 0, c*cell_size.w, win.h);
-        //     }
-        //     while (r < h+1) : (r += 1) {
-        //         try renderer.drawLine(0, r*cell_size.h, win.w, r*cell_size.h);
-        //     }
-        // }
+            while (c < w+1) : (c += 1) {
+                try renderer.drawLine(c*cell_size.w, 0, c*cell_size.w, win.h);
+            }
+            while (r < h+1) : (r += 1) {
+                try renderer.drawLine(0, r*cell_size.h, win.w, r*cell_size.h);
+            }
+        }
     }
 
     pub fn newApple() void {
@@ -173,6 +277,9 @@ pub fn main() !void {
     
     var renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = true });
     defer renderer.destroy();
+
+    try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_ADD);
+
     arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random();
 
     var snake = Snake{
@@ -243,6 +350,7 @@ pub fn main() !void {
         try renderer.clear();
         
         try arena.draw(&renderer);
+        try snake.draw(&renderer);
 
         renderer.present();
     }
