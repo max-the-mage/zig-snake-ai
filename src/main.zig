@@ -2,8 +2,9 @@ const std = @import("std");
 const sdl = @import("sdl2");
 
 const abs = std.math.absInt;
+const divC = std.math.divCeil;
 
-const win = .{.w = 720, .h = 720};
+const win = .{.w = 900, .h = 900};
 
 const Pos = struct {
     x: usize,
@@ -57,9 +58,9 @@ const Snake = struct {
         const head = snake.items.items[0];
         return switch (snake.dir) {
             .up => head.y > 0 and arena.getCell(head.x, head.y-1).* != .snake,
-            .down => head.y < arena.h and arena.getCell(head.x, head.y+1).* != .snake,
+            .down => head.y < arena.h-1 and arena.getCell(head.x, head.y+1).* != .snake,
             .left => head.x > 0 and arena.getCell(head.x-1, head.y).* != .snake,
-            .right => head.x < arena.w and arena.getCell(head.x+1, head.y).* != .snake,
+            .right => head.x < arena.w-1 and arena.getCell(head.x+1, head.y).* != .snake,
         };
     }
 
@@ -72,17 +73,17 @@ const Snake = struct {
         for (snake.items.items) |seg, i| {
 
             //3/4 of cell size;
-            const cx = (arena.cell_size.w*3)/4;
-            const cy = (arena.cell_size.h*3)/4;
-            const fx = arena.cell_size.w/8;
-            const fy = arena.cell_size.h/8;
+            const cx = try divC(usize, (arena.cell_size.w*3), 4);
+            const cy = try divC(usize, (arena.cell_size.h*3), 4);
+            const fx = try divC(usize, arena.cell_size.w, 8);
+            const fy = try divC(usize, arena.cell_size.h, 8);
 
             // first, draw the base rect
             try renderer.fillRect(sdl.Rectangle{
                 .x = @intCast(i32, seg.x*arena.cell_size.w+fx),
                 .y = @intCast(i32, seg.y*arena.cell_size.w+fy),
-                .width = cx,
-                .height = cy,
+                .width = @intCast(i32, cx),
+                .height = @intCast(i32, cy),
             });
 
             // draw connection to next segment
@@ -212,10 +213,10 @@ const arena = struct {
 
         try renderer.setColorRGB(0xf5, 0x00, 0x00);
         try renderer.fillRect(sdl.Rectangle{
-            .x = @intCast(i32, apple.x*cell_size.w+(cell_size.w/4)),
-            .y = @intCast(i32, apple.y*cell_size.h+(cell_size.w/4)),
-            .width = @intCast(i32, cell_size.w/2),
-            .height = @intCast(i32, cell_size.h/2),
+            .x = @intCast(i32, apple.x*cell_size.w+(try divC(usize, cell_size.w, 4))),
+            .y = @intCast(i32, apple.y*cell_size.h+(try divC(usize, cell_size.h, 4))),
+            .width = try divC(i32, cell_size.w, 2),
+            .height = try divC(i32, cell_size.h, 2),
         });
 
         // draw lines 
@@ -314,31 +315,53 @@ pub fn main() !void {
             var diff_x: isize = @intCast(isize, arena.apple.x) - @intCast(isize, head.x);
             var diff_y: isize = @intCast(isize, arena.apple.y) - @intCast(isize, head.y);
 
-            if ((try abs(diff_y)) > (try abs(diff_x)))
-                snake.dir = if(diff_y < 0) .up else .down
+            if (head.x != arena.apple.x)
+                snake.dir = if(diff_x < 0) .left else .right
             else
-                snake.dir = if(diff_x < 0) .left else .right;
+                snake.dir = if(diff_y < 0) .up else .down;
 
-            const start_dir = snake.dir;
-            const left = arena.rand.boolean();
-            while (!snake.frontClear()) {    
-                if (left) {
-                    snake.dir = switch (snake.dir) {
-                        .up => .left,
-                        .left => .down,
-                        .down => .right,
-                        .right => .up,
-                    };
-                } else {
-                    snake.dir = switch (snake.dir) {
-                        .up => .right,
-                        .right => .down,
-                        .down => .left,
-                        .left => .up,
-                    };
+            if (!snake.frontClear()){
+                const start_dir = snake.dir;
+
+                var snake_to_left: usize = 0;
+                var snake_to_right: usize = 0;
+                var snake_above: usize = 0;
+                var snake_below: usize = 0;
+
+                
+
+                for (snake.items.items) |seg| {
+                    if (seg.x < head.x) snake_to_left += 1;
+                    if (seg.x > head.x) snake_to_right += 1;
+                    if (seg.y < head.y) snake_above += 1;
+                    if (seg.y > head.y) snake_below += 1;
                 }
 
-                if (start_dir == snake.dir) @panic("stuck in loop");
+                const left = switch (snake.dir) {
+                    .left => @minimum(snake_above, snake_below) == snake_above,
+                    .right => @minimum(snake_above, snake_below) == snake_below,
+                    .up => @minimum(snake_to_left, snake_to_right) == snake_to_right,
+                    .down => @minimum(snake_to_left, snake_to_right) == snake_to_left,
+                };
+                while (!snake.frontClear()) {
+                    if (left) {
+                        snake.dir = switch (snake.dir) {
+                            .up => .left,
+                            .left => .down,
+                            .down => .right,
+                            .right => .up,
+                        };
+                    } else {
+                        snake.dir = switch (snake.dir) {
+                            .up => .right,
+                            .right => .down,
+                            .down => .left,
+                            .left => .up,
+                        };
+                    }
+
+                    if (start_dir == snake.dir) @panic("stuck in loop");
+                }
             }
 
             try snake.move();
