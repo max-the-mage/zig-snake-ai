@@ -19,7 +19,6 @@ pub fn build(b: *std.build.Builder) void {
     sdk.link(exe, .dynamic);
     exe.addPackage(sdk.getWrapperPackage("sdl2"));
     exe.setBuildMode(mode);
-    exe.linkLibC();
     exe.install();
 
     const run_cmd = exe.run();
