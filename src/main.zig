@@ -4,7 +4,7 @@ const sdl = @import("sdl2");
 const abs = std.math.absInt;
 const divC = std.math.divCeil;
 
-const win = .{.w = 900, .h = 900};
+const win = .{.w = 720, .h = 720};
 
 const Pos = struct {
     x: usize,
@@ -45,23 +45,43 @@ const Snake = struct {
             item.* = temp;
         }
 
-        if (arena.getCell(head.x, head.y).* == .food) { 
+        if ((try arena.getCell(head.x, head.y)).* == .food) { 
             try snake.items.append(tail);
             arena.newApple();
         }
-        else arena.getCell(tail.x, tail.y).* = .none;
+        else (try arena.getCell(tail.x, tail.y)).* = .none;
 
-        arena.getCell(tst.x, tst.y).* = .snake;
+        (try arena.getCell(tst.x, tst.y)).* = .snake;
     }
 
     fn frontClear(snake: *Snake) bool {
         const head = snake.items.items[0];
-        return switch (snake.dir) {
-            .up => head.y > 0 and arena.getCell(head.x, head.y-1).* != .snake,
-            .down => head.y < arena.h-1 and arena.getCell(head.x, head.y+1).* != .snake,
-            .left => head.x > 0 and arena.getCell(head.x-1, head.y).* != .snake,
-            .right => head.x < arena.w-1 and arena.getCell(head.x+1, head.y).* != .snake,
+        const s = &arena.State.snake;
+        const ahead_has_exit = switch (snake.dir) {
+            .up => 
+                (arena.getCell(head.x-%1, head.y-%1) catch s).* != .snake
+                or (arena.getCell(head.x+1, head.y-%1) catch s).* != .snake
+                or (arena.getCell(head.x, head.y-%2) catch s).* != .snake,
+            .down =>
+                ((arena.getCell(head.x-%1, head.y+%1) catch s).* != .snake
+                or (arena.getCell(head.x+1, head.y+1) catch s).* != .snake
+                or (arena.getCell(head.x, head.y+2) catch s).* != .snake),
+            .left =>
+                ((arena.getCell(head.x-%1, head.y-%1) catch s).* != .snake
+                or (arena.getCell(head.x-%1, head.y+1) catch s).* != .snake
+                or (arena.getCell(head.x-%2, head.y) catch s).* != .snake),
+            .right =>
+                ((arena.getCell(head.x+1, head.y-%1) catch s).* != .snake
+                or (arena.getCell(head.x+1, head.y+1) catch s).* != .snake
+                or (arena.getCell(head.x+2, head.y) catch s).* != .snake),
         };
+        const direct_clear = switch (snake.dir) {
+            .up => head.y > 0 and (arena.getCell(head.x, head.y-1) catch s).* != .snake,
+            .down => head.y < arena.h-1 and (arena.getCell(head.x, head.y+1) catch s).* != .snake,
+            .left => head.x > 0 and (arena.getCell(head.x-1, head.y) catch s).* != .snake,
+            .right => head.x < arena.w-1 and (arena.getCell(head.x+1, head.y) catch s).* != .snake,
+        };
+        return direct_clear and ahead_has_exit;
     }
 
     fn draw(snake: *Snake, renderer: *sdl.Renderer) !void {
@@ -203,9 +223,9 @@ const arena = struct {
     pub var grid = [_]State{State.none}**size;
     pub var apple: Pos = undefined;
 
-    pub fn getCell(x: usize, y: usize) *arena.State {
-        if (x >= w) @panic("out of bounds");
-        if (y >= h) @panic("out of bounds");
+    pub fn getCell(x: usize, y: usize) error{OutOfBounds}!*arena.State {
+        if (x >= w) return error.OutOfBounds;
+        if (y >= h) return error.OutOfBounds;
         return &grid[x+y*w];
     }
     
@@ -279,9 +299,9 @@ pub fn main() !void {
     var renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = true });
     defer renderer.destroy();
 
-    try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_ADD);
+    try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
 
-    arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random();
+    arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random;
 
     var snake = Snake{
         .items = std.ArrayList(Pos).init(ac),
@@ -295,7 +315,7 @@ pub fn main() !void {
     });
 
     for (snake.items.items) |pos| {
-        arena.getCell(pos.x, pos.y).* = .snake;
+        (try arena.getCell(pos.x, pos.y)).* = .snake;
     }
 
     arena.newApple();
@@ -315,34 +335,35 @@ pub fn main() !void {
             var diff_x: isize = @intCast(isize, arena.apple.x) - @intCast(isize, head.x);
             var diff_y: isize = @intCast(isize, arena.apple.y) - @intCast(isize, head.y);
 
-            if (head.x != arena.apple.x)
+            if (@maximum(try abs(diff_x), try abs(diff_y)) == try abs(diff_x))
                 snake.dir = if(diff_x < 0) .left else .right
             else
                 snake.dir = if(diff_y < 0) .up else .down;
 
-            if (!snake.frontClear()){
+            if (!snake.frontClear()) {
                 const start_dir = snake.dir;
 
-                var snake_to_left: usize = 0;
-                var snake_to_right: usize = 0;
-                var snake_above: usize = 0;
-                var snake_below: usize = 0;
+                var top_left: usize = 0;
+                var top_right: usize = 0;
+                var bottom_left: usize = 0;
+                var bottom_right: usize = 0;                
 
-                
-
-                for (snake.items.items) |seg| {
-                    if (seg.x < head.x) snake_to_left += 1;
-                    if (seg.x > head.x) snake_to_right += 1;
-                    if (seg.y < head.y) snake_above += 1;
-                    if (seg.y > head.y) snake_below += 1;
+                for (snake.items.items) |seg, i| {
+                    if (i > snake.items.items.len/3) break; // simpler way to ignore the snake's tail
+                    if (seg.x <= head.x and seg.y < head.y) top_left += 1;
+                    if (seg.x > head.x and seg.y <= head.y) top_right += 1;
+                    if (seg.y <= head.y and seg.x < head.x) bottom_left += 1;
+                    if (seg.y > head.y and seg.x >= head.x) bottom_right += 1;
                 }
 
                 const left = switch (snake.dir) {
-                    .left => @minimum(snake_above, snake_below) == snake_above,
-                    .right => @minimum(snake_above, snake_below) == snake_below,
-                    .up => @minimum(snake_to_left, snake_to_right) == snake_to_right,
-                    .down => @minimum(snake_to_left, snake_to_right) == snake_to_left,
+                    .left => @minimum(bottom_left, top_left) == bottom_left,
+                    .right => @minimum(top_right, bottom_right) == top_right,
+                    .up => @minimum(top_left, top_right) == top_left,
+                    .down => @minimum(bottom_right, bottom_left) == bottom_right,
                 };
+
+                // const left = arena.rand.boolean();
                 while (!snake.frontClear()) {
                     if (left) {
                         snake.dir = switch (snake.dir) {
