@@ -6,11 +6,9 @@ const divC = std.math.divCeil;
 
 const win = .{.w = 720, .h = 720};
 
-
-
 const arena = struct {
-    pub const w: u32 = 10;
-    pub const h: u32 = 10;
+    pub const w: u32 = 20;
+    pub const h: u32 = 20;
     pub const size: u32 = w*h;
     pub const cell_size = .{.w = win.w/w, .h = win.h/h};
     pub var rand: *std.rand.Random = undefined;
@@ -22,7 +20,9 @@ const arena = struct {
     };
 
     pub var grid = [_]State{State.none}**size;
-    pub var path = [_]Snake.Direction{Snake.Direction.down}**size;
+    pub var path = [_]Direction{Direction.down}**size;
+    pub var path_order = [_]usize{0}**size;
+
     pub var apple: Pos = undefined;
 
     pub fn getCell(x: usize, y: usize) error{OutOfBounds}!*arena.State {
@@ -31,11 +31,19 @@ const arena = struct {
         return &grid[x+y*w];
     }
 
-    pub fn getPath(x: usize, y: usize) error{OutOfBounds}!*Snake.Direction {
+    pub fn getPath(x: usize, y: usize) error{OutOfBounds}!*Direction {
         if (x >= w) return error.OutOfBounds;
         if (y >= h) return error.OutOfBounds;
         return &path[x+y*w];
     }
+
+    pub fn getPathOrder(x: usize, y: usize) *usize {
+        // if (x >= w) return error.OutOfBounds;
+        // if (y >= h) return error.OutOfBounds;
+        return &path_order[x+y*w];
+    }
+
+    
     
     pub fn draw(renderer: *sdl.Renderer) !void {
 
@@ -145,7 +153,7 @@ pub fn main() !void {
     );
     defer window.destroy();
     
-    var renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = true });
+    var renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = false });
     defer renderer.destroy();
 
     try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
@@ -185,6 +193,16 @@ pub fn main() !void {
     }
     (try arena.getPath(0, 0)).* = .down;
 
+    // cycle ordering
+    {
+    var cur_pos = Pos{.x=0, .y=0};
+        var ordering: usize = 0;
+        while (ordering < arena.size) : (ordering += 1) {
+            arena.getPathOrder(cur_pos.x, cur_pos.y).* = ordering;
+            cur_pos = cur_pos.move((try arena.getPath(cur_pos.x, cur_pos.y)).*);
+        }
+    }
+
 
     arena.newApple();
 
@@ -197,34 +215,37 @@ pub fn main() !void {
             }
         }
 
-        if (@mod(frame, 3) == 0) {
-            const head = snake.body.items[0];
+        if (@mod(frame, 1) == 0) {
+            var head = snake.body.items[0];
+            var tail = snake.body.items[snake.body.items.len-1];
             snake.dir = (try arena.getPath(head.x, head.y)).*;
 
-            if (arena.apple.x >= head.x and head.y != 0 and arena.apple.y != 0) {
-                snake.dir = blk: {
-                    if (arena.apple.y == head.y) {
-                        for (snake.body.items) |seg| {
-                            if (seg.y == 0) continue;
-                            if (seg.x > head.x and seg.x <= arena.apple.x) break :blk snake.dir;
+            const dist_apple = head.cycleDistance(&arena.apple);
+            const dist_tail = head.cycleDistance(&tail);
+            var dist_next: isize = 1;
+            var max_shortcut = @minimum(dist_apple, dist_tail-3);
+
+            if (dist_apple < dist_tail) {
+                max_shortcut -= 1;
+                if ((dist_tail - dist_apple) * 4 > (arena.size-snake.body.items.len)) max_shortcut -= 10;
+            }
+
+            if (snake.body.items.len > (arena.size*3)/4) max_shortcut = 0;
+
+            if (max_shortcut > 0) {
+
+                for (std.enums.values(Direction)) |dir| {
+                    var b = head.move(dir);
+
+                    if ((arena.getCell(b.x, b.y) catch &arena.State.snake).* != .snake) {
+                        const dist_b = head.cycleDistance(&b);
+                        if (dist_b <= max_shortcut and dist_b > dist_next) {
+                            snake.dir = dir;
+                            dist_next = dist_b;
                         }
-
-                        break :blk .right;
                     }
+                }
 
-                    break :blk snake.dir;
-                };
-            } else {
-                snake.dir = blk: {
-                    if (head.y == 0 or head.x == arena.w-1) break :blk snake.dir;
-
-                    for (snake.body.items) |seg| {
-                        if (seg.y == 0) continue;
-                        if (seg.x > head.x) break :blk snake.dir;
-                    }
-
-                    break :blk .right;
-                };
             }
 
             try snake.move();
@@ -252,15 +273,38 @@ const Pos = struct {
     fn isEqual(a: *Pos, b: *Pos) bool {
         return a.x == b.x and a.y == b.y;
     }
+
+    pub fn cycleDistance(a: *Pos, b: *Pos) isize {
+        const order_a = @intCast(isize, arena.getPathOrder(a.x, a.y).*);
+        const order_b = @intCast(isize, arena.getPathOrder(b.x, b.y).*);
+        if (order_a < order_b) return order_b - order_a;
+        
+        return order_b - order_a + arena.size;
+    }
+
+    fn move(pos: Pos, dir: Direction) Pos {
+        var p = pos;
+        switch (dir) {
+            .right => p.x += 1,
+            .left => p.x -%= 1,
+            .up => p.y -%= 1,
+            .down => p.y += 1,
+        }
+
+        return p;
+    }
+};
+
+const Direction = enum{
+    up,
+    down,
+    left,
+    right
 };
 
 const Snake = struct {
-    const Direction = enum{
-        up,
-        down,
-        left,
-        right
-    };
+
+    
 
     body: std.ArrayList(Pos),
     dir: Direction = .right,
@@ -280,9 +324,7 @@ const Snake = struct {
         }
 
         for (slice[1..]) |*item| {
-            var temp = prev;
-            prev = item.*;
-            item.* = temp;
+            std.mem.swap(Pos, item, &prev);
         }
 
         // update grid with new cell head
@@ -297,7 +339,83 @@ const Snake = struct {
 
     // fancy snake directional drawing
     fn draw(snake: *Snake, renderer: *sdl.Renderer) !void {
-        
+        {
+            var cur_pos = snake.body.items[0];
+
+            try renderer.setColorRGBA(0xfc, 0x74, 0x19, 0xf5);
+
+            const cell_size = arena.cell_size;
+            const hcx = cell_size.w/2;
+            const hcy = cell_size.h/2;
+
+            while (!cur_pos.isEqual(&arena.apple)) {
+
+                var tail = snake.body.items[snake.body.items.len-1];
+                var ideal_dir = (try arena.getPath(cur_pos.x, cur_pos.y)).*;
+
+                const dist_apple = cur_pos.cycleDistance(&arena.apple);
+                const dist_tail = cur_pos.cycleDistance(&tail);
+                var dist_next: isize = 1;
+                var max_shortcut = @minimum(dist_apple, dist_tail-3);
+
+                if (dist_apple < dist_tail) {
+                    max_shortcut -= 1;
+                    if ((dist_tail - dist_apple) * 4 > (arena.size-snake.body.items.len)) max_shortcut -= 10;
+                }
+
+                if (snake.body.items.len > (arena.size*3/4)) max_shortcut = 0;
+
+                if (max_shortcut > 0) {
+
+                    for (std.enums.values(Direction)) |dir| {
+                        var b = cur_pos.move(dir);
+
+                        if ((arena.getCell(b.x, b.y) catch &arena.State.snake).* != .snake) {
+                            const dist_b = cur_pos.cycleDistance(&b);
+                            if (dist_b <= max_shortcut and dist_b > dist_next) {
+                                ideal_dir = dir;
+                                dist_next = dist_b;
+                            }
+                        }
+                    }
+
+                }
+
+                switch (ideal_dir) {
+                    .right => try renderer.drawLine(
+                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                        @intCast(i32, (cur_pos.x+1)*cell_size.w+hcx)-1,
+                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                    ),
+                    .left => try renderer.drawLine(
+                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                        @intCast(i32, (cur_pos.x-1)*cell_size.w+hcx)+1,
+                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                    ),
+                    .up => try renderer.drawLine(
+                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                        @intCast(i32, (cur_pos.y-1)*cell_size.h+hcy)+1,
+                    ),
+                    .down => try renderer.drawLine(
+                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                        @intCast(i32, (cur_pos.y+1)*cell_size.h+hcy)-1,
+                    ),
+                }
+
+                switch (ideal_dir) {
+                    .right => cur_pos.x += 1,
+                    .left => cur_pos.x -= 1,
+                    .up => cur_pos.y -= 1,
+                    .down => cur_pos.y += 1,
+                }
+            }
+        }
 
         var prev: ?Pos = null;
 
@@ -415,64 +533,7 @@ const Snake = struct {
                 });
             }
 
-            prev = seg;
-
-            {
-                var cur_pos = snake.body.items[0];
-
-                try renderer.setColorRGB(0xff, 0x00, 0x00);
-
-                const cell_size = arena.cell_size;
-                const hcx = cell_size.w/2;
-                const hcy = cell_size.h/2;
-
-                while (!cur_pos.isEqual(&arena.apple)) {
-                    const diff_x: isize = @intCast(isize, arena.apple.x) - @intCast(isize, cur_pos.x);
-                    const diff_y: isize = @intCast(isize, arena.apple.y) - @intCast(isize, cur_pos.y);
-
-                    
-
-                    var ideal_dir: Direction = undefined;
-                    if (diff_x != 0)
-                        ideal_dir = if(diff_x < 0) .left else .right
-                    else
-                        ideal_dir = if(diff_y < 0) .up else .down;
-
-                    switch (ideal_dir) {
-                        .right => try renderer.drawLine(
-                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
-                            @intCast(i32, (cur_pos.x+1)*cell_size.w+hcx)-1,
-                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
-                        ),
-                        .left => try renderer.drawLine(
-                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
-                            @intCast(i32, (cur_pos.x-1)*cell_size.w+hcx)+1,
-                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
-                        ),
-                        .up => try renderer.drawLine(
-                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
-                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                            @intCast(i32, (cur_pos.y-1)*cell_size.h+hcy)+1,
-                        ),
-                        .down => try renderer.drawLine(
-                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
-                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                            @intCast(i32, (cur_pos.y+1)*cell_size.h+hcy)-1,
-                        ),
-                    }
-
-                    switch (ideal_dir) {
-                        .right => cur_pos.x += 1,
-                        .left => cur_pos.x -= 1,
-                        .up => cur_pos.y -= 1,
-                        .down => cur_pos.y += 1,
-                    }
-                }
-            }
+            prev = seg;       
         }
     }
 };
