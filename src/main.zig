@@ -23,11 +23,10 @@ const Snake = struct {
     dir: Direction = .right,
 
     pub fn move(snake: *Snake) !void {
-        var tail = snake.items.items[snake.items.items.len-1];
-
         var slice = snake.items.items;
+        var tail = slice[slice.len-1];
+        
         var head = &slice[0];
-
         var prev = head.*;
 
         switch (snake.dir) {
@@ -45,13 +44,15 @@ const Snake = struct {
             item.* = temp;
         }
 
-        if ((try arena.getCell(head.x, head.y)).* == .food) { 
+        if (head.x == arena.apple.x and head.y == arena.apple.y) { 
             try snake.items.append(tail);
-            arena.newApple();
         }
         else (try arena.getCell(tail.x, tail.y)).* = .none;
 
         (try arena.getCell(tst.x, tst.y)).* = .snake;
+
+        slice = snake.items.items;
+        if (slice[0].x == arena.apple.x and slice[0].y == arena.apple.y) arena.newApple();
     }
 
     fn frontClear(snake: *Snake) bool {
@@ -208,8 +209,8 @@ const Snake = struct {
 };
 
 const arena = struct {
-    pub const w: u32 = 30;
-    pub const h: u32 = 30;
+    pub const w: u32 = 60;
+    pub const h: u32 = 60;
     pub const size: u32 = w*h;
     pub const cell_size = .{.w = win.w/w, .h = win.h/h};
     pub var rand: *std.rand.Random = undefined;
@@ -221,12 +222,19 @@ const arena = struct {
     };
 
     pub var grid = [_]State{State.none}**size;
+    pub var path = [_]Snake.Direction{Snake.Direction.down}**size;
     pub var apple: Pos = undefined;
 
     pub fn getCell(x: usize, y: usize) error{OutOfBounds}!*arena.State {
         if (x >= w) return error.OutOfBounds;
         if (y >= h) return error.OutOfBounds;
         return &grid[x+y*w];
+    }
+
+    pub fn getPath(x: usize, y: usize) error{OutOfBounds}!*Snake.Direction {
+        if (x >= w) return error.OutOfBounds;
+        if (y >= h) return error.OutOfBounds;
+        return &path[x+y*w];
     }
     
     pub fn draw(renderer: *sdl.Renderer) !void {
@@ -261,12 +269,13 @@ const arena = struct {
 
         const orig = new_pos;
         
-        while (grid[new_pos] == .snake and new_pos > 0 and new_pos < size) {
+        while (grid[new_pos] == .snake) {
             if (left) {
-                new_pos -= 1;
-                if(new_pos < 1){left=false;new_pos=orig;}
+                if(new_pos == 0){left=false;new_pos=orig;}
+                else new_pos -= 1;
             } else {
-                new_pos += 1;
+                if(new_pos == size-1) {left=true;new_pos=orig;}
+                else new_pos += 1;
             }
         }
 
@@ -296,7 +305,7 @@ pub fn main() !void {
     );
     defer window.destroy();
     
-    var renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = true });
+    var renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = false });
     defer renderer.destroy();
 
     try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
@@ -318,10 +327,30 @@ pub fn main() !void {
         (try arena.getCell(pos.x, pos.y)).* = .snake;
     }
 
+    // create simple hamilton path
+    var i: usize  = 0;
+    
+    while (i < arena.w) : (i+= 1) {
+        (try arena.getPath(i, 0)).* = .left; // top row
+        (try arena.getPath(i, arena.h-1)).* = if (i%2==0) .right else .up; // bottom zigzags
+
+        // lines up and down
+        var j: usize = 1;
+        while(j < arena.h-1) : (j+=1) {
+            (try arena.getPath(i, j)).* = if (i%2==0) .down else .up;
+        }
+
+        if (i > 0 and i < arena.w-1) { // top zigzags
+            (try arena.getPath(i, 1)).* = if (i%2==0) .down else .right;
+        }
+    }
+    (try arena.getPath(0, 0)).* = .down;
+
+
     arena.newApple();
 
     var frame: usize = 0;
-    mainLoop: while (true) {
+    mainLoop: while (snake.items.items.len < arena.size) {
         while (sdl.pollEvent()) |ev| {
             switch (ev) {
                 .quit => break :mainLoop,
@@ -332,57 +361,101 @@ pub fn main() !void {
         if (@mod(frame, 1) == 0) {
 
             const head = snake.items.items[0];
-            var diff_x: isize = @intCast(isize, arena.apple.x) - @intCast(isize, head.x);
-            var diff_y: isize = @intCast(isize, arena.apple.y) - @intCast(isize, head.y);
+            // var diff_x: isize = @intCast(isize, arena.apple.x) - @intCast(isize, head.x);
+            // var diff_y: isize = @intCast(isize, arena.apple.y) - @intCast(isize, head.y);
 
-            if (@maximum(try abs(diff_x), try abs(diff_y)) == try abs(diff_x))
-                snake.dir = if(diff_x < 0) .left else .right
-            else
-                snake.dir = if(diff_y < 0) .up else .down;
+            // if (diff_x != 0)
+            //     snake.dir = if(diff_x < 0) .left else .right
+            // else
+            //     snake.dir = if(diff_y < 0) .up else .down;
 
-            if (!snake.frontClear()) {
-                const start_dir = snake.dir;
+            // if (!snake.frontClear()) {
+            //     const start_dir = snake.dir;
 
-                var top_left: usize = 0;
-                var top_right: usize = 0;
-                var bottom_left: usize = 0;
-                var bottom_right: usize = 0;                
+            //     var top_left: usize = 0;
+            //     var top_right: usize = 0;
+            //     var bottom_left: usize = 0;
+            //     var bottom_right: usize = 0;                
 
-                for (snake.items.items) |seg, i| {
-                    if (i > snake.items.items.len/3) break; // simpler way to ignore the snake's tail
-                    if (seg.x <= head.x and seg.y < head.y) top_left += 1;
-                    if (seg.x > head.x and seg.y <= head.y) top_right += 1;
-                    if (seg.y <= head.y and seg.x < head.x) bottom_left += 1;
-                    if (seg.y > head.y and seg.x >= head.x) bottom_right += 1;
-                }
+            //     for (snake.items.items) |seg| {
+            //         if ((try abs(@intCast(i32, seg.x) - @intCast(i32, head.x))) > 5) continue;
+            //         if ((try abs(@intCast(i32, seg.y) - @intCast(i32, head.y))) > 5) continue;
+            //         if (seg.x <= head.x and seg.y < head.y) top_left += 1;
+            //         if (seg.x > head.x and seg.y <= head.y) top_right += 1;
+            //         if (seg.y <= head.y and seg.x < head.x) bottom_left += 1;
+            //         if (seg.y > head.y and seg.x >= head.x) bottom_right += 1;
+            //     }
 
-                const left = switch (snake.dir) {
-                    .left => @minimum(bottom_left, top_left) == bottom_left,
-                    .right => @minimum(top_right, bottom_right) == top_right,
-                    .up => @minimum(top_left, top_right) == top_left,
-                    .down => @minimum(bottom_right, bottom_left) == bottom_right,
-                };
+            //     var left = switch (snake.dir) {
+            //         .left => @minimum(bottom_left, top_left) == bottom_left,
+            //         .right => @minimum(top_right, bottom_right) == top_right,
+            //         .up => @minimum(top_left, top_right) == top_left,
+            //         .down => @minimum(bottom_right, bottom_left) == bottom_right,
+            //     };
 
-                // const left = arena.rand.boolean();
-                while (!snake.frontClear()) {
-                    if (left) {
-                        snake.dir = switch (snake.dir) {
-                            .up => .left,
-                            .left => .down,
-                            .down => .right,
-                            .right => .up,
-                        };
-                    } else {
-                        snake.dir = switch (snake.dir) {
-                            .up => .right,
-                            .right => .down,
-                            .down => .left,
-                            .left => .up,
-                        };
+            //     if (arena.rand.uintLessThan(u8, 11) == 10) {
+            //         left = !left;
+            //     }
+
+            //     // const left = arena.rand.boolean();
+            //     while (!snake.frontClear()) {
+            //         if (left) {
+            //             snake.dir = switch (snake.dir) {
+            //                 .up => .left,
+            //                 .left => .down,
+            //                 .down => .right,
+            //                 .right => .up,
+            //             };
+            //         } else {
+            //             snake.dir = switch (snake.dir) {
+            //                 .up => .right,
+            //                 .right => .down,
+            //                 .down => .left,
+            //                 .left => .up,
+            //             };
+            //         }
+
+            //         if (start_dir == snake.dir) {
+            //             std.log.info("snake len: {}", .{snake.items.items.len});
+            //             runs += 1;
+            //             total_len += snake.items.items.len;
+            //             for (snake.items.items) |seg| {
+            //                 (try arena.getCell(seg.x, seg.y)).* = .none;
+            //             }
+            //             snake.items.shrinkAndFree(2);
+
+            //             snake.items.items[0] = .{.x=arena.w/2, .y=arena.h/2};
+            //             snake.items.items[1] = .{.x=arena.w/2-1, .y=arena.h/2};
+            //         }
+            //     }
+            // }
+
+            snake.dir = (try arena.getPath(head.x, head.y)).*;
+
+            if (arena.apple.x >= head.x and head.y != 0 and arena.apple.y != 0) {
+                snake.dir = blk: {
+                    if (arena.apple.y == head.y) {
+                        for (snake.items.items) |seg| {
+                            if (seg.y == 0) continue;
+                            if (seg.x > head.x and seg.x <= arena.apple.x) break :blk snake.dir;
+                        }
+
+                        break :blk .right;
                     }
 
-                    if (start_dir == snake.dir) @panic("stuck in loop");
-                }
+                    break :blk snake.dir;
+                };
+            } else {
+                snake.dir = blk: {
+                    if (head.y == 0 or head.x == arena.w-1) break :blk snake.dir;
+
+                    for (snake.items.items) |seg| {
+                        if (seg.y == 0) continue;
+                        if (seg.x > head.x) break :blk snake.dir;
+                    }
+
+                    break :blk .right;
+                };
             }
 
             try snake.move();
