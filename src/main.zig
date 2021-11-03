@@ -6,6 +6,8 @@ const divC = std.math.divCeil;
 
 const win = .{.w = 720, .h = 720};
 
+
+
 const arena = struct {
     pub const w: u32 = 10;
     pub const h: u32 = 10;
@@ -156,8 +158,8 @@ pub fn main() !void {
     defer snake.body.deinit();
 
     try snake.body.appendSlice(&[2]Pos{
-        .{.x=0, .y=1}, 
-        .{.x=0, .y=0},
+        .{.x=arena.w/2, .y=arena.h/2}, 
+        .{.x=(arena.w/2)-1, .y=arena.h/2},
     });
 
     for (snake.body.items) |pos| {
@@ -195,7 +197,7 @@ pub fn main() !void {
             }
         }
 
-        if (@mod(frame, 10) == 0) {
+        if (@mod(frame, 3) == 0) {
             const head = snake.body.items[0];
             snake.dir = (try arena.getPath(head.x, head.y)).*;
 
@@ -266,8 +268,9 @@ const Snake = struct {
     pub fn move(snake: *Snake) !void {
         var slice = snake.body.items;
         var tail = slice[slice.len-1];
-        
+
         var head = &slice[0];
+        var prev = slice[0];
 
         switch (snake.dir) {
             .right => head.x += 1,
@@ -276,7 +279,6 @@ const Snake = struct {
             .down => head.y += 1,
         }
 
-        var prev = head.*;
         for (slice[1..]) |*item| {
             var temp = prev;
             prev = item.*;
@@ -291,17 +293,17 @@ const Snake = struct {
             arena.newApple();
         }
         else (try arena.getCell(tail.x, tail.y)).* = .none;
-
     }
 
     // fancy snake directional drawing
     fn draw(snake: *Snake, renderer: *sdl.Renderer) !void {
-        try renderer.setColorRGB(0x0, 0xf5, 0x0);
+        
 
         var prev: ?Pos = null;
 
         //var prev: ?Pos = null;
         for (snake.body.items) |seg, i| {
+            try renderer.setColorRGB(0x0, 0xf5, 0x0);
 
             //3/4 of cell size;
             const cx = try divC(usize, (arena.cell_size.w*3), 4);
@@ -414,6 +416,63 @@ const Snake = struct {
             }
 
             prev = seg;
+
+            {
+                var cur_pos = snake.body.items[0];
+
+                try renderer.setColorRGB(0xff, 0x00, 0x00);
+
+                const cell_size = arena.cell_size;
+                const hcx = cell_size.w/2;
+                const hcy = cell_size.h/2;
+
+                while (!cur_pos.isEqual(&arena.apple)) {
+                    const diff_x: isize = @intCast(isize, arena.apple.x) - @intCast(isize, cur_pos.x);
+                    const diff_y: isize = @intCast(isize, arena.apple.y) - @intCast(isize, cur_pos.y);
+
+                    
+
+                    var ideal_dir: Direction = undefined;
+                    if (diff_x != 0)
+                        ideal_dir = if(diff_x < 0) .left else .right
+                    else
+                        ideal_dir = if(diff_y < 0) .up else .down;
+
+                    switch (ideal_dir) {
+                        .right => try renderer.drawLine(
+                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                            @intCast(i32, (cur_pos.x+1)*cell_size.w+hcx)-1,
+                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                        ),
+                        .left => try renderer.drawLine(
+                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                            @intCast(i32, (cur_pos.x-1)*cell_size.w+hcx)+1,
+                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                        ),
+                        .up => try renderer.drawLine(
+                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                            @intCast(i32, (cur_pos.y-1)*cell_size.h+hcy)+1,
+                        ),
+                        .down => try renderer.drawLine(
+                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                            @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                            @intCast(i32, cur_pos.x*cell_size.w+hcx),
+                            @intCast(i32, (cur_pos.y+1)*cell_size.h+hcy)-1,
+                        ),
+                    }
+
+                    switch (ideal_dir) {
+                        .right => cur_pos.x += 1,
+                        .left => cur_pos.x -= 1,
+                        .up => cur_pos.y -= 1,
+                        .down => cur_pos.y += 1,
+                    }
+                }
+            }
         }
     }
 };
