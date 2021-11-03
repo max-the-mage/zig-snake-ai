@@ -102,7 +102,7 @@ const Snake = struct {
             // first, draw the base rect
             try renderer.fillRect(sdl.Rectangle{
                 .x = @intCast(i32, seg.x*arena.cell_size.w+fx),
-                .y = @intCast(i32, seg.y*arena.cell_size.w+fy),
+                .y = @intCast(i32, seg.y*arena.cell_size.h+fy),
                 .width = @intCast(i32, cx),
                 .height = @intCast(i32, cy),
             });
@@ -209,8 +209,8 @@ const Snake = struct {
 };
 
 const arena = struct {
-    pub const w: u32 = 60;
-    pub const h: u32 = 60;
+    pub const w: u32 = 30;
+    pub const h: u32 = 30;
     pub const size: u32 = w*h;
     pub const cell_size = .{.w = win.w/w, .h = win.h/h};
     pub var rand: *std.rand.Random = undefined;
@@ -310,7 +310,7 @@ pub fn main() !void {
 
     try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
 
-    arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random;
+    arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random();
 
     var snake = Snake{
         .items = std.ArrayList(Pos).init(ac),
@@ -350,7 +350,7 @@ pub fn main() !void {
     arena.newApple();
 
     var frame: usize = 0;
-    mainLoop: while (snake.items.items.len < arena.size) {
+    mainLoop: while (snake.items.items.len < arena.size-1) {
         while (sdl.pollEvent()) |ev| {
             switch (ev) {
                 .quit => break :mainLoop,
@@ -471,4 +471,7 @@ pub fn main() !void {
 
         renderer.present();
     }
+
+    std.log.err("congrats u won bb", .{});
+    std.time.sleep(std.time.ns_per_s*5);
 }
