@@ -9,6 +9,10 @@ const win = .{.w = 720, .h = 720};
 const Pos = struct {
     x: usize,
     y: usize,
+
+    fn isEqual(a: *Pos, b: *Pos) bool {
+        return a.x == b.x and a.y == b.y;
+    }
 };
 
 const Snake = struct {
@@ -27,7 +31,6 @@ const Snake = struct {
         var tail = slice[slice.len-1];
         
         var head = &slice[0];
-        var prev = head.*;
 
         switch (snake.dir) {
             .right => head.x += 1,
@@ -36,55 +39,25 @@ const Snake = struct {
             .down => head.y += 1,
         }
 
-        const tst = head.*;
-
+        var prev = head.*;
         for (slice[1..]) |*item| {
             var temp = prev;
             prev = item.*;
             item.* = temp;
         }
 
-        if (head.x == arena.apple.x and head.y == arena.apple.y) { 
+        // update grid with new cell head
+        (try arena.getCell(head.x, head.y)).* = .snake;
+
+        if (head.isEqual(&arena.apple)) { 
             try snake.items.append(tail);
+            arena.newApple();
         }
         else (try arena.getCell(tail.x, tail.y)).* = .none;
 
-        (try arena.getCell(tst.x, tst.y)).* = .snake;
-
-        slice = snake.items.items;
-        if (slice[0].x == arena.apple.x and slice[0].y == arena.apple.y) arena.newApple();
     }
 
-    fn frontClear(snake: *Snake) bool {
-        const head = snake.items.items[0];
-        const s = &arena.State.snake;
-        const ahead_has_exit = switch (snake.dir) {
-            .up => 
-                (arena.getCell(head.x-%1, head.y-%1) catch s).* != .snake
-                or (arena.getCell(head.x+1, head.y-%1) catch s).* != .snake
-                or (arena.getCell(head.x, head.y-%2) catch s).* != .snake,
-            .down =>
-                ((arena.getCell(head.x-%1, head.y+%1) catch s).* != .snake
-                or (arena.getCell(head.x+1, head.y+1) catch s).* != .snake
-                or (arena.getCell(head.x, head.y+2) catch s).* != .snake),
-            .left =>
-                ((arena.getCell(head.x-%1, head.y-%1) catch s).* != .snake
-                or (arena.getCell(head.x-%1, head.y+1) catch s).* != .snake
-                or (arena.getCell(head.x-%2, head.y) catch s).* != .snake),
-            .right =>
-                ((arena.getCell(head.x+1, head.y-%1) catch s).* != .snake
-                or (arena.getCell(head.x+1, head.y+1) catch s).* != .snake
-                or (arena.getCell(head.x+2, head.y) catch s).* != .snake),
-        };
-        const direct_clear = switch (snake.dir) {
-            .up => head.y > 0 and (arena.getCell(head.x, head.y-1) catch s).* != .snake,
-            .down => head.y < arena.h-1 and (arena.getCell(head.x, head.y+1) catch s).* != .snake,
-            .left => head.x > 0 and (arena.getCell(head.x-1, head.y) catch s).* != .snake,
-            .right => head.x < arena.w-1 and (arena.getCell(head.x+1, head.y) catch s).* != .snake,
-        };
-        return direct_clear and ahead_has_exit;
-    }
-
+    // fancy snake directional drawing
     fn draw(snake: *Snake, renderer: *sdl.Renderer) !void {
         try renderer.setColorRGB(0x0, 0xf5, 0x0);
 
