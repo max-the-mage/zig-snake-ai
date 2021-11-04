@@ -6,7 +6,7 @@ const abs = std.math.absInt;
 const divC = std.math.divCeil;
 const divF = std.math.divFloor;
 
-const win = .{.w = 720, .h = 720};
+const win = .{.w = 800, .h = 800};
 
 const Size = struct {
     w: i32,
@@ -148,9 +148,11 @@ pub fn main() !void {
     const params = comptime [_]clap.Param(clap.Help){
         try clap.parseParam("-h, --help Display this and exit"),
         try clap.parseParam("-s, --size <NUM> Snake board size"),
-        try clap.parseParam("-f, --fancy Disable fancy rendering"),
+        try clap.parseParam("-f, --fancy Enable fancy rendering"),
+        try clap.parseParam("-p, --paths Enable path rendering"),
         try clap.parseParam("-b, --benchmark <NUM> Do render free benchmarking based on # of iterations"),
         try clap.parseParam("-z, --zoom Disable vsync to run as fast as possible"),
+        try clap.parseParam("-m, --messages <NUM> Amount of messages during benchmarking"),
     };
 
     var args = try clap.parse(clap.Help, &params, .{});
@@ -161,12 +163,14 @@ pub fn main() !void {
         std.os.exit(0);
     }
 
-    arena.render_path = !args.flag("--fancy");
-    arena.fancy_snake = !args.flag("--fancy");
+    arena.render_path = args.flag("--paths");
+    arena.fancy_snake = args.flag("--fancy");
 
     arena.benchmark = try std.fmt.parseUnsigned(
         usize, args.option("--benchmark") orelse "0", 10 
     );
+
+    const messages = try std.fmt.parseUnsigned(usize, args.option("--messages") orelse "10", 10);
 
     const size = try std.fmt.parseUnsigned(u32, args.option("--size") orelse "20", 10);
     arena.w = size;
@@ -262,6 +266,8 @@ pub fn main() !void {
 
     var timer = try std.time.Timer.start();
     var per_run_timer = try std.time.Timer.start();
+
+    const log_freq = if (messages != 0) arena.benchmark/messages else 0;
     mainLoop: while (true) {
         if (arena.benchmark == 0) {
             while (sdl.pollEvent()) |ev| {
@@ -310,16 +316,15 @@ pub fn main() !void {
             steps += 1;
             total_steps += 1;
 
-        
             if (snake.body.items.len == arena.size) {
                 const cur_lap = per_run_timer.lap();
                 iterations += 1;
 
                 if (arena.benchmark == 0) break :mainLoop;
 
-                const log_freq = arena.benchmark/10;
+                
 
-                if (log_freq == 0 or @mod(iterations, log_freq) == 0) 
+                if (log_freq != 0 and @mod(iterations, log_freq) == 0) 
                     std.log.err("run: {}, steps: {} time: {d:.4}s steps/apple: {d:.2}", .{
                         iterations, steps, 
                         @intToFloat(f64, cur_lap)/@intToFloat(f64, std.time.ns_per_s),
