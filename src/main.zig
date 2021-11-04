@@ -7,8 +7,8 @@ const divC = std.math.divCeil;
 const win = .{.w = 720, .h = 720};
 
 const arena = struct {
-    pub const w: u32 = 20;
-    pub const h: u32 = 20;
+    pub const w: u32 = 30;
+    pub const h: u32 = 30;
     pub const size: u32 = w*h;
     pub const cell_size = .{.w = win.w/w, .h = win.h/h};
     pub var rand: *std.rand.Random = undefined;
@@ -45,14 +45,12 @@ const arena = struct {
         // if (y >= h) return error.OutOfBounds;
         return &path_order[x+y*w];
     }
-
-    
     
     pub fn draw(renderer: *sdl.Renderer) !void {
 
         // draw path
         if (render_path) {
-            try renderer.setColorRGBA(5, 252, 240, 255);
+            try renderer.setColorRGBA(5, 252, 240, 90);
 
             const hcx = cell_size.w/2;
             const hcy = cell_size.h/2;
@@ -96,8 +94,7 @@ const arena = struct {
             .height = try divC(i32, cell_size.h, 2),
         });
 
-        // draw lines 
-        {
+        { // draw lines
             try renderer.setColorRGBA(127, 127, 127, 90);
             var c: i32 = 0;
             var r: i32 = 0;
@@ -109,8 +106,6 @@ const arena = struct {
                 try renderer.drawLine(0, r*cell_size.h, win.w, r*cell_size.h);
             }
         }
-
-        
     }
 
     pub fn newApple() void {
@@ -158,7 +153,6 @@ pub fn main() !void {
     
     var renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = false });
     defer renderer.destroy();
-
     try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
 
     arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random();
@@ -167,7 +161,6 @@ pub fn main() !void {
         .body = std.ArrayList(Pos).init(ac),
     };
     defer snake.body.deinit();
-
     try snake.body.appendSlice(&[2]Pos{
         .{.x=arena.w/2, .y=arena.h/2}, 
         .{.x=(arena.w/2)-1, .y=arena.h/2},
@@ -178,7 +171,7 @@ pub fn main() !void {
     }
 
     // create simple hamilton path
-    // note: this code only works on
+    // note: this code only works on evenly sized grids
     var i: usize  = 0;
     while (i < arena.w) : (i+= 1) {
         (try arena.getPath(i, 0)).* = .left; // line across top row
@@ -194,18 +187,16 @@ pub fn main() !void {
             (try arena.getPath(i, 1)).* = if (i%2==0) .down else .right;
         }
     }
-    (try arena.getPath(0, 0)).* = .down;
+    (try arena.getPath(0, 0)).* = .down; // top left corner
 
-    // cycle ordering
-    {
-    var cur_pos = Pos{.x=0, .y=0};
+    { // cycle ordering for skips
+        var cur_pos = Pos{.x=0, .y=0};
         var ordering: usize = 0;
         while (ordering < arena.size) : (ordering += 1) {
             arena.getPathOrder(cur_pos.x, cur_pos.y).* = ordering;
             cur_pos = cur_pos.move((try arena.getPath(cur_pos.x, cur_pos.y)).*);
         }
     }
-
 
     arena.newApple();
 
@@ -230,13 +221,14 @@ pub fn main() !void {
 
             if (dist_apple < dist_tail) {
                 max_shortcut -= 1;
+                // might run into some apples along the way
                 if ((dist_tail - dist_apple) * 4 > (arena.size-snake.body.items.len)) max_shortcut -= 10;
             }
 
-            if (snake.body.items.len > (arena.size*5)/8) max_shortcut = 0;
-
+            if (snake.body.items.len > (arena.size*5)/8) max_shortcut = 0; // just follow the path when the board is mostly filled
             if (max_shortcut > 0) {
 
+                // zig coming in clutch with fancy meta stuff
                 for (std.enums.values(Direction)) |dir| {
                     var b = head.move(dir);
 
@@ -253,7 +245,6 @@ pub fn main() !void {
 
             try snake.move();
         }
-        
         frame += 1;
 
         try renderer.setColorRGB(0, 0, 0);
@@ -306,9 +297,6 @@ const Direction = enum{
 };
 
 const Snake = struct {
-
-    
-
     body: std.ArrayList(Pos),
     dir: Direction = .right,
 
@@ -327,7 +315,7 @@ const Snake = struct {
         }
 
         for (slice[1..]) |*item| {
-            std.mem.swap(Pos, item, &prev);
+            std.mem.swap(Pos, item, &prev); // no more accidental pointer conundrums
         }
 
         // update grid with new cell head
@@ -337,10 +325,9 @@ const Snake = struct {
             try snake.body.append(tail);
             arena.newApple();
         }
-        else (try arena.getCell(tail.x, tail.y)).* = .none;
+        else (try arena.getCell(tail.x, tail.y)).* = .none; // remove the tail from the grid
     }
 
-    // fancy snake directional drawing
     fn draw(snake: *Snake, renderer: *sdl.Renderer) !void {
         if (arena.render_path) {
             var cur_pos = snake.body.items[0];
@@ -367,9 +354,7 @@ const Snake = struct {
                 }
 
                 if (snake.body.items.len > (arena.size*5)/8) max_shortcut = 0;
-
                 if (max_shortcut > 0) {
-
                     for (std.enums.values(Direction)) |dir| {
                         var b = cur_pos.move(dir);
 
@@ -440,7 +425,7 @@ const Snake = struct {
                 .height = @intCast(i32, cy),
             });
 
-            // draw connection to next segment
+            // fancy directional snake drawing
             if (arena.fancy_snake) {
                 if (i != snake.body.items.len-1) {
                     const next = snake.body.items[i+1];
