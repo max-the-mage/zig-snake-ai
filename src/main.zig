@@ -261,6 +261,7 @@ pub fn main() !void {
     var iterations: usize = 0;
 
     var timer = try std.time.Timer.start();
+    var per_run_timer = try std.time.Timer.start();
     mainLoop: while (true) {
         if (arena.benchmark == 0) {
             while (sdl.pollEvent()) |ev| {
@@ -309,17 +310,19 @@ pub fn main() !void {
             steps += 1;
             total_steps += 1;
 
+        
             if (snake.body.items.len == arena.size) {
+                const cur_lap = per_run_timer.lap();
                 iterations += 1;
 
                 if (arena.benchmark == 0) break :mainLoop;
 
                 const log_freq = arena.benchmark/10;
-                
 
                 if (log_freq == 0 or @mod(iterations, log_freq) == 0) 
-                    std.log.err("run: {}, steps: {} steps/apple: {d:.2}", .{
-                        iterations, steps,
+                    std.log.err("run: {}, steps: {} time: {d:.4}s steps/apple: {d:.2}", .{
+                        iterations, steps, 
+                        @intToFloat(f64, cur_lap)/@intToFloat(f64, std.time.ns_per_s),
                         @intToFloat(f32, steps+1)/@intToFloat(f32, arena.size)
                     });
                 if (iterations == arena.benchmark) break :mainLoop;
