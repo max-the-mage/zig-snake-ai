@@ -1,20 +1,29 @@
 const std = @import("std");
 const sdl = @import("sdl2");
+const clap = @import("clap");
 
 const abs = std.math.absInt;
 const divC = std.math.divCeil;
+const divF = std.math.divFloor;
 
 const win = .{.w = 720, .h = 720};
 
+const Size = struct {
+    w: i32,
+    h: i32,
+};
+
 const arena = struct {
-    pub const w: u32 = 30;
-    pub const h: u32 = 30;
-    pub const size: u32 = w*h;
-    pub const cell_size = .{.w = win.w/w, .h = win.h/h};
+    pub var w: u32 = undefined;
+    pub var h: u32 = undefined;
+    pub var size: u32 = undefined;
+    pub var cell_size = Size{.w = 0, .h = 0};
     pub var rand: *std.rand.Random = undefined;
 
-    pub const render_path = true;
-    pub const fancy_snake = true;
+    pub var render_path = true;
+    pub var fancy_snake = true;
+
+    pub var benchmark: usize = undefined;
 
     pub const State = enum{
         none,
@@ -22,9 +31,9 @@ const arena = struct {
         food,
     };
 
-    pub var grid = [_]State{State.none}**size;
-    pub var path = [_]Direction{Direction.down}**size;
-    pub var path_order = [_]usize{0}**size;
+    pub var grid: []State = undefined;
+    pub var path: []Direction = undefined;
+    pub var path_order: []usize = undefined;
 
     pub var apple: Pos = undefined;
 
@@ -52,11 +61,11 @@ const arena = struct {
         if (render_path) {
             try renderer.setColorRGBA(5, 252, 240, 90);
 
-            const hcx = cell_size.w/2;
-            const hcy = cell_size.h/2;
+            const hcx = @divFloor(cell_size.w, 2);
+            const hcy = @divFloor(cell_size.h, 2);
 
             for (path) |item, i| {
-                const item_pos = .{.x=i%w, .y=i/w};
+                const item_pos = .{.x=@intCast(i32, i%w), .y=@intCast(i32, i/w)};
                 switch (item) {
                     .right => try renderer.drawLine(
                         @intCast(i32, item_pos.x*cell_size.w+hcx),
@@ -88,8 +97,8 @@ const arena = struct {
 
         try renderer.setColorRGB(0xf5, 0x00, 0x00);
         try renderer.fillRect(sdl.Rectangle{
-            .x = @intCast(i32, apple.x*cell_size.w+(try divC(usize, cell_size.w, 4))),
-            .y = @intCast(i32, apple.y*cell_size.h+(try divC(usize, cell_size.h, 4))),
+            .x = @intCast(i32, apple.x)*cell_size.w+(try divC(i32, cell_size.w, 4)),
+            .y = @intCast(i32, apple.y)*cell_size.h+(try divC(i32, cell_size.h, 4)),
             .width = try divC(i32, cell_size.w, 2),
             .height = try divC(i32, cell_size.h, 2),
         });
@@ -136,6 +145,48 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const ac = &gpa.allocator;
 
+    const params = comptime [_]clap.Param(clap.Help){
+        try clap.parseParam("-h, --help Display this and exit"),
+        try clap.parseParam("-s, --size <NUM> Snake board size"),
+        try clap.parseParam("-f, --fancy Disable fancy rendering"),
+        try clap.parseParam("-b, --benchmark <NUM> Do render free benchmarking based on # of iterations"),
+        try clap.parseParam("-z, --zoom Disable vsync to run as fast as possible"),
+    };
+
+    var args = try clap.parse(clap.Help, &params, .{});
+    defer args.deinit();
+
+    if (args.flag("--help")) {
+        try clap.help(std.io.getStdErr().writer(), &params);
+        std.os.exit(0);
+    }
+
+    arena.render_path = !args.flag("--fancy");
+    arena.fancy_snake = !args.flag("--fancy");
+
+    arena.benchmark = try std.fmt.parseUnsigned(
+        usize, args.option("--benchmark") orelse "0", 10 
+    );
+
+    const size = try std.fmt.parseUnsigned(u32, args.option("--size") orelse "20", 10);
+    arena.w = size;
+    arena.h = size;
+    arena.size = arena.w*arena.h;
+    arena.cell_size = .{
+        .w=@divFloor(win.w, @intCast(i32, arena.w)),
+        .h=@divFloor(win.h, @intCast(i32, arena.h)),
+    };
+
+    arena.grid = try ac.alloc(arena.State, size*size);
+    arena.path = try ac.alloc(Direction, size*size);
+    arena.path_order = try ac.alloc(usize, size*size);
+
+    defer ac.free(arena.grid);
+    defer ac.free(arena.path);
+    defer ac.free(arena.path_order);
+
+    var renderer: sdl.Renderer = undefined;
+    var window: sdl.Window = undefined;
     try sdl.init(.{
         .video = true,
         .events = true,
@@ -143,28 +194,32 @@ pub fn main() !void {
     });
     defer sdl.quit();
 
-    var window = try sdl.createWindow(
-        "snake",
-        .{ .centered = {} }, .{ .centered = {} },
-        win.w, win.h,
-        .{ .shown = true },
-    );
     defer window.destroy();
-    
-    var renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = false });
     defer renderer.destroy();
-    try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
 
-    arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random();
+    if (arena.benchmark == 0) {
+
+        window = try sdl.createWindow(
+            "snake",
+            .{ .centered = {} }, .{ .centered = {} },
+            win.w, win.h,
+            .{ .shown = true },
+        );
+        
+        renderer = try sdl.createRenderer(
+            window, null, 
+            .{ .accelerated = true, .present_vsync=!args.flag("--zoom") }
+        );
+        try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
+    }
+
+    arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random;
 
     var snake = Snake{
         .body = std.ArrayList(Pos).init(ac),
     };
     defer snake.body.deinit();
-    try snake.body.appendSlice(&[2]Pos{
-        .{.x=arena.w/2, .y=arena.h/2}, 
-        .{.x=(arena.w/2)-1, .y=arena.h/2},
-    });
+    try snake.body.append(.{.x=0, .y=0});
 
     for (snake.body.items) |pos| {
         (try arena.getCell(pos.x, pos.y)).* = .snake;
@@ -201,11 +256,18 @@ pub fn main() !void {
     arena.newApple();
 
     var frame: usize = 0;
-    mainLoop: while (snake.body.items.len < arena.size-1) {
-        while (sdl.pollEvent()) |ev| {
-            switch (ev) {
-                .quit => break :mainLoop,
-                else => {},
+    var steps: usize = 0;
+    var total_steps: usize = 0;
+    var iterations: usize = 0;
+
+    var timer = try std.time.Timer.start();
+    mainLoop: while (true) {
+        if (arena.benchmark == 0) {
+            while (sdl.pollEvent()) |ev| {
+                switch (ev) {
+                    .quit => break :mainLoop,
+                    else => {},
+                }
             }
         }
 
@@ -244,20 +306,47 @@ pub fn main() !void {
             }
 
             try snake.move();
+            steps += 1;
+            total_steps += 1;
+
+            if (snake.body.items.len == arena.size) {
+                iterations += 1;
+
+                if (arena.benchmark == 0) break :mainLoop;
+
+                const log_freq = arena.benchmark/10;
+                
+
+                if (log_freq == 0 or @mod(iterations, log_freq) == 0) 
+                    std.log.err("run: {}, steps: {} steps/apple: {d:.2}", .{
+                        iterations, steps,
+                        @intToFloat(f32, steps+1)/@intToFloat(f32, arena.size)
+                    });
+                if (iterations == arena.benchmark) break :mainLoop;
+
+                steps = 0;
+                snake.body.shrinkAndFree(1);
+                snake.body.items[0] = Pos{.x=0, .y=0};
+            }
         }
         frame += 1;
 
-        try renderer.setColorRGB(0, 0, 0);
-        try renderer.clear();
-        
-        try arena.draw(&renderer);
-        try snake.draw(&renderer);
+        if (arena.benchmark == 0) {
+            try renderer.setColorRGB(0, 0, 0);
+            try renderer.clear();
+            
+            try arena.draw(&renderer);
+            try snake.draw(&renderer);
 
-        renderer.present();
+            renderer.present();
+        }
     }
-
-    std.log.err("congrats u won bb", .{});
-    std.time.sleep(std.time.ns_per_s*5);
+    
+    std.log.err("\ntime: {d:.4}s\niterations: {}\naverage steps: {d:.2}\nboard size: {}x{}", .{
+        @intToFloat(f64, timer.read())/@intToFloat(f64, std.time.ns_per_s),
+        iterations, @intToFloat(f64, total_steps)/@intToFloat(f64, iterations),
+        arena.w, arena.h
+    });
 }
 
 const Pos = struct {
@@ -323,7 +412,7 @@ const Snake = struct {
 
         if (head.isEqual(&arena.apple)) { 
             try snake.body.append(tail);
-            arena.newApple();
+            if (snake.body.items.len < arena.size) arena.newApple();
         }
         else (try arena.getCell(tail.x, tail.y)).* = .none; // remove the tail from the grid
     }
@@ -335,8 +424,8 @@ const Snake = struct {
             try renderer.setColorRGBA(0xfc, 0x74, 0x19, 0xf5);
 
             const cell_size = arena.cell_size;
-            const hcx = cell_size.w/2;
-            const hcy = cell_size.h/2;
+            const hcx = @divFloor(cell_size.w, 2);
+            const hcy = @divFloor(cell_size.h, 2);
 
             while (!cur_pos.isEqual(&arena.apple)) {
 
@@ -366,33 +455,32 @@ const Snake = struct {
                             }
                         }
                     }
-
                 }
 
                 switch (ideal_dir) {
                     .right => try renderer.drawLine(
-                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
-                        @intCast(i32, (cur_pos.x+1)*cell_size.w+hcx)-1,
-                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                        @intCast(i32, (cur_pos.x+1))*cell_size.w+hcx-1,
+                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
                     ),
                     .left => try renderer.drawLine(
-                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
-                        @intCast(i32, (cur_pos.x-1)*cell_size.w+hcx)+1,
-                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
+                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                        @intCast(i32, (cur_pos.x-1))*cell_size.w+hcx+1,
+                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
                     ),
                     .up => try renderer.drawLine(
-                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
-                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                        @intCast(i32, (cur_pos.y-1)*cell_size.h+hcy)+1,
+                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, (cur_pos.y-1))*cell_size.h+hcy+1,
                     ),
                     .down => try renderer.drawLine(
-                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                        @intCast(i32, cur_pos.y*cell_size.h+hcy),
-                        @intCast(i32, cur_pos.x*cell_size.w+hcx),
-                        @intCast(i32, (cur_pos.y+1)*cell_size.h+hcy)-1,
+                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, cur_pos.y+1)*cell_size.h+hcy-1,
                     ),
                 }
 
@@ -406,21 +494,19 @@ const Snake = struct {
         }
         
         var prev: ?Pos = null;
-
-        //var prev: ?Pos = null;
         for (snake.body.items) |seg, i| {
             try renderer.setColorRGB(0x0, 0xf5, 0x0);
 
             //3/4 of cell size;
-            const cx = try divC(usize, (arena.cell_size.w*3), 4);
-            const cy = try divC(usize, (arena.cell_size.h*3), 4);
-            const fx = try divC(usize, arena.cell_size.w, 8);
-            const fy = try divC(usize, arena.cell_size.h, 8);
+            const cx = try divC(i32, (arena.cell_size.w*3), 4);
+            const cy = try divC(i32, (arena.cell_size.h*3), 4);
+            const fx = try divC(i32, arena.cell_size.w, 8);
+            const fy = try divC(i32, arena.cell_size.h, 8);
 
             // first, draw the base rect
             try renderer.fillRect(sdl.Rectangle{
-                .x = @intCast(i32, seg.x*arena.cell_size.w+fx),
-                .y = @intCast(i32, seg.y*arena.cell_size.h+fy),
+                .x = @intCast(i32, seg.x)*arena.cell_size.w+fx,
+                .y = @intCast(i32, seg.y)*arena.cell_size.h+fy,
                 .width = @intCast(i32, cx),
                 .height = @intCast(i32, cy),
             });
@@ -468,8 +554,8 @@ const Snake = struct {
                     };
 
                     try renderer.fillRect(sdl.Rectangle{
-                        .x = @intCast(i32, seg.x*arena.cell_size.w+x),
-                        .y = @intCast(i32, seg.y*arena.cell_size.h+y),
+                        .x = @intCast(i32, seg.x)*arena.cell_size.w+x,
+                        .y = @intCast(i32, seg.y)*arena.cell_size.h+y,
                         .width = @intCast(i32, width),
                         .height = @intCast(i32, height),
                     });
@@ -515,8 +601,8 @@ const Snake = struct {
                     };
 
                     try renderer.fillRect(sdl.Rectangle{
-                        .x = @intCast(i32, seg.x*arena.cell_size.w+x),
-                        .y = @intCast(i32, seg.y*arena.cell_size.h+y),
+                        .x = @intCast(i32, seg.x)*arena.cell_size.w+x,
+                        .y = @intCast(i32, seg.y)*arena.cell_size.h+y,
                         .width = @intCast(i32, width),
                         .height = @intCast(i32, height),
                     });

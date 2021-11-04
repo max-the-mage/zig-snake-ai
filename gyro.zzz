@@ -5,3 +5,9 @@ deps:
       git:
         url: "https://github.com/MasterQ32/SDL.zig.git"
         ref: master
+  clap:
+    root: clap.zig
+    src:
+      git:
+        url: "https://github.com/Hejsil/zig-clap.git"
+        ref: zig-master
