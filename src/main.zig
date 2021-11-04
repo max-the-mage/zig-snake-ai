@@ -5,8 +5,9 @@ const clap = @import("clap");
 const abs = std.math.absInt;
 const divC = std.math.divCeil;
 const divF = std.math.divFloor;
+const divT = std.math.divTrunc;
 
-const win = .{.w = 800, .h = 800};
+const win = .{.w = 720, .h = 720};
 
 const Size = struct {
     w: i32,
@@ -437,6 +438,8 @@ const Snake = struct {
         const cell_size = arena.cell_size;
         const hcx = @divFloor(cell_size.w, 2);
         const hcy = @divFloor(cell_size.h, 2);
+
+        // TODO: improve path rendering with the same method as snake rendering
         if (arena.render_path) {
             var cur_pos = snake.body.items[0];
 
@@ -509,10 +512,10 @@ const Snake = struct {
         }
 
         //3/4 of cell size;
-        const cx = try divC(i32, (arena.cell_size.w*3), 4);
-        const cy = try divC(i32, (arena.cell_size.h*3), 4);
-        const fx = try divC(i32, arena.cell_size.w, 8);
-        const fy = try divC(i32, arena.cell_size.h, 8);
+        const cx = (try divF(i32, (arena.cell_size.w*3), 4));
+        const cy = (try divF(i32, (arena.cell_size.h*3), 4));
+        const fx = (try divF(i32, arena.cell_size.w, 8));
+        const fy = (try divF(i32, arena.cell_size.h, 8));
 
         var prev: ?Pos = null;
 
@@ -564,7 +567,7 @@ const Snake = struct {
                     
                     try rect(renderer, switch (cur_dir) {
                         .left => .{
-                            .x = @intCast(i32, seg.x+1)*cell_size.w-fy,
+                            .x = @intCast(i32, seg.x)*cell_size.w+(fx*7),
                             .y = fy+@intCast(i32, seg.y)*cell_size.h,
                             .width = (@intCast(i32, cur_pos.x) - @intCast(i32, seg.x))*cell_size.w,
                             .height = cy,
@@ -577,7 +580,7 @@ const Snake = struct {
                         },
                         .up => .{
                             .x = fx+@intCast(i32, seg.x)*cell_size.w,
-                            .y = @intCast(i32, seg.y+1)*cell_size.h-fy,
+                            .y = @intCast(i32, seg.y)*cell_size.h+(fy*7),
                             .width = cx,
                             .height = (@intCast(i32, cur_pos.y) - @intCast(i32, seg.y))*cell_size.h,
                         },
