@@ -13,6 +13,14 @@ const Size = struct {
     h: i32,
 };
 
+pub fn rect(renderer: *sdl.Renderer, r: sdl.Rectangle) !void {
+    if (arena.wireframe) {
+        try renderer.drawRect(r);
+    } else {
+        try renderer.fillRect(r);
+    }
+}
+
 const arena = struct {
     pub var w: u32 = undefined;
     pub var h: u32 = undefined;
@@ -21,7 +29,7 @@ const arena = struct {
     pub var rand: *std.rand.Random = undefined;
 
     pub var render_path = true;
-    pub var fancy_snake = true;
+    pub var wireframe = false;
 
     pub var benchmark: usize = undefined;
 
@@ -96,7 +104,7 @@ const arena = struct {
         }
 
         try renderer.setColorRGB(0xf5, 0x00, 0x00);
-        try renderer.fillRect(sdl.Rectangle{
+        try rect(renderer, sdl.Rectangle{
             .x = @intCast(i32, apple.x)*cell_size.w+(try divC(i32, cell_size.w, 4)),
             .y = @intCast(i32, apple.y)*cell_size.h+(try divC(i32, cell_size.h, 4)),
             .width = try divC(i32, cell_size.w, 2),
@@ -148,8 +156,8 @@ pub fn main() !void {
     const params = comptime [_]clap.Param(clap.Help){
         try clap.parseParam("-h, --help Display this and exit"),
         try clap.parseParam("-s, --size <NUM> Snake board size"),
-        try clap.parseParam("-f, --fancy Enable fancy rendering"),
         try clap.parseParam("-p, --paths Enable path rendering"),
+        try clap.parseParam("-w, --wireframe Render snake body outlines"),
         try clap.parseParam("-b, --benchmark <NUM> Do render free benchmarking based on # of iterations"),
         try clap.parseParam("-z, --zoom Disable vsync to run as fast as possible"),
         try clap.parseParam("-m, --messages <NUM> Amount of messages during benchmarking"),
@@ -164,7 +172,7 @@ pub fn main() !void {
     }
 
     arena.render_path = args.flag("--paths");
-    arena.fancy_snake = args.flag("--fancy");
+    arena.wireframe = args.flag("--wireframe");
 
     arena.benchmark = try std.fmt.parseUnsigned(
         usize, args.option("--benchmark") orelse "0", 10 
@@ -217,7 +225,7 @@ pub fn main() !void {
         try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
     }
 
-    arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random;
+    arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random();
 
     var snake = Snake{
         .body = std.ArrayList(Pos).init(ac),
@@ -426,14 +434,13 @@ const Snake = struct {
     }
 
     fn draw(snake: *Snake, renderer: *sdl.Renderer) !void {
+        const cell_size = arena.cell_size;
+        const hcx = @divFloor(cell_size.w, 2);
+        const hcy = @divFloor(cell_size.h, 2);
         if (arena.render_path) {
             var cur_pos = snake.body.items[0];
 
             try renderer.setColorRGBA(0xfc, 0x74, 0x19, 0xf5);
-
-            const cell_size = arena.cell_size;
-            const hcx = @divFloor(cell_size.w, 2);
-            const hcy = @divFloor(cell_size.h, 2);
 
             while (!cur_pos.isEqual(&arena.apple)) {
 
@@ -500,124 +507,105 @@ const Snake = struct {
                 }
             }
         }
-        
+
+        //3/4 of cell size;
+        const cx = try divC(i32, (arena.cell_size.w*3), 4);
+        const cy = try divC(i32, (arena.cell_size.h*3), 4);
+        const fx = try divC(i32, arena.cell_size.w, 8);
+        const fy = try divC(i32, arena.cell_size.h, 8);
+
         var prev: ?Pos = null;
-        for (snake.body.items) |seg, i| {
-            try renderer.setColorRGB(0x0, 0xf5, 0x0);
 
-            //3/4 of cell size;
-            const cx = try divC(i32, (arena.cell_size.w*3), 4);
-            const cy = try divC(i32, (arena.cell_size.h*3), 4);
-            const fx = try divC(i32, arena.cell_size.w, 8);
-            const fy = try divC(i32, arena.cell_size.h, 8);
+        var cur_pos: Pos = snake.body.items[0];
+        var cur_dir: Direction = undefined;
 
-            // first, draw the base rect
-            try renderer.fillRect(sdl.Rectangle{
-                .x = @intCast(i32, seg.x)*arena.cell_size.w+fx,
-                .y = @intCast(i32, seg.y)*arena.cell_size.h+fy,
-                .width = @intCast(i32, cx),
-                .height = @intCast(i32, cy),
-            });
+        var col = sdl.Color.rgb(0, 255, 0);
 
-            // fancy directional snake drawing
-            if (arena.fancy_snake) {
-                if (i != snake.body.items.len-1) {
-                    const next = snake.body.items[i+1];
+        var con_tail = false;
 
-                    const diff_x = @intCast(isize, next.x) - @intCast(isize, seg.x);
-                    const diff_y = @intCast(isize, next.y) - @intCast(isize, seg.y);
+        for (snake.body.items) |_, i| {
+            var seg = snake.body.items[i];
 
-                    var dir_next: Direction = undefined;
+            try renderer.setColor(col);
 
-                    dir_next = switch (diff_x) {
-                        -1 => .left,
-                        1 => .right,
-                        else => .up
+            if (i != snake.body.items.len-1) {
+                var next = snake.body.items[i+1];
+
+                const diff_x = @intCast(isize, next.x) - @intCast(isize, seg.x);
+                const diff_y = @intCast(isize, next.y) - @intCast(isize, seg.y);
+
+                var dir_next: Direction = undefined;
+
+                dir_next = switch (diff_x) {
+                    -1 => .left,
+                    1 => .right,
+                    else => .up
+                };
+                if(dir_next != .left and dir_next != .right) {
+                    dir_next = switch (diff_y) {
+                        -1 => .up,
+                        1 => .down,
+                        else => .down,
                     };
-                    if(dir_next != .left and dir_next != .right) {
-                        dir_next = switch (diff_y) {
-                            -1 => .up,
-                            1 => .down,
-                            else => .down,
-                        };
-                    }
-
-                    const x = switch(dir_next) {
-                        .left => 0,
-                        .up, .down => fx,
-                        .right => fx+cx,
-                    };
-                    const y = switch(dir_next) {
-                        .up => 0,
-                        .left, .right, => fy,
-                        .down => fy+cy,
-                    };
-                    const width = switch(dir_next) {
-                        .left, .right => fx,
-                        .up, .down => cx,
-                    };
-                    const height = switch(dir_next) {
-                        .up, .down => fy,
-                        .left, .right => cy,
-                    };
-
-                    try renderer.fillRect(sdl.Rectangle{
-                        .x = @intCast(i32, seg.x)*arena.cell_size.w+x,
-                        .y = @intCast(i32, seg.y)*arena.cell_size.h+y,
-                        .width = @intCast(i32, width),
-                        .height = @intCast(i32, height),
-                    });
+                }
+                
+                if (i == 0) {
+                    cur_pos = seg;
+                    cur_dir = dir_next;
                 }
 
-                if (prev) |next| {
+                if (cur_dir != dir_next or i == snake.body.items.len-2) {
 
-                    const diff_x = @intCast(isize, next.x) - @intCast(isize, seg.x);
-                    const diff_y = @intCast(isize, next.y) - @intCast(isize, seg.y);
-
-                    var dir_next: Direction = undefined;
-
-                    dir_next = switch (diff_x) {
-                        -1 => .left,
-                        1 => .right,
-                        else => .up
-                    };
-                    if(dir_next != .left and dir_next != .right) {
-                        dir_next = switch (diff_y) {
-                            -1 => .up,
-                            1 => .down,
-                            else => .down,
-                        };
+                    // incorporate tail into final segment                    
+                    if (i == snake.body.items.len-2) {
+                        if (cur_dir == dir_next) seg = snake.body.items[snake.body.items.len-1]
+                        else con_tail=true;
                     }
-
-                    const x = switch(dir_next) {
-                        .left => 0,
-                        .up, .down => fx,
-                        .right => fx+cx,
-                    };
-                    const y = switch(dir_next) {
-                        .up => 0,
-                        .left, .right, => fy,
-                        .down => fy+cy,
-                    };
-                    const width = switch(dir_next) {
-                        .left, .right => fx,
-                        .up, .down => cx,
-                    };
-                    const height = switch(dir_next) {
-                        .up, .down => fy,
-                        .left, .right => cy,
-                    };
-
-                    try renderer.fillRect(sdl.Rectangle{
-                        .x = @intCast(i32, seg.x)*arena.cell_size.w+x,
-                        .y = @intCast(i32, seg.y)*arena.cell_size.h+y,
-                        .width = @intCast(i32, width),
-                        .height = @intCast(i32, height),
+                    
+                    try rect(renderer, switch (cur_dir) {
+                        .left => .{
+                            .x = @intCast(i32, seg.x+1)*cell_size.w-fy,
+                            .y = fy+@intCast(i32, seg.y)*cell_size.h,
+                            .width = (@intCast(i32, cur_pos.x) - @intCast(i32, seg.x))*cell_size.w,
+                            .height = cy,
+                        },
+                        .right => .{
+                            .x = fx+@intCast(i32, cur_pos.x)*cell_size.w,
+                            .y = fy+@intCast(i32, cur_pos.y)*cell_size.h,
+                            .width = (@intCast(i32, seg.x) - @intCast(i32, cur_pos.x))*cell_size.w,
+                            .height = cy,
+                        },
+                        .up => .{
+                            .x = fx+@intCast(i32, seg.x)*cell_size.w,
+                            .y = @intCast(i32, seg.y+1)*cell_size.h-fy,
+                            .width = cx,
+                            .height = (@intCast(i32, cur_pos.y) - @intCast(i32, seg.y))*cell_size.h,
+                        },
+                        .down => .{
+                            .x = fx+@intCast(i32, cur_pos.x)*cell_size.w,
+                            .y = fy+@intCast(i32, cur_pos.y)*cell_size.h,
+                            .width = cx,
+                            .height = (@intCast(i32, seg.y) - @intCast(i32, cur_pos.y))*cell_size.h,
+                        },
                     });
+
+                    cur_pos = seg;
+                    cur_dir = dir_next;
                 }
+            } else {
+                const h = @boolToInt((cur_dir == .left or cur_dir == .right) and con_tail);
+                const v = @boolToInt((cur_dir == .up or cur_dir == .down) and con_tail);
+                // const r = @boolToInt(cur_dir == .left and con_tail);
+                // const d = @boolToInt(cur_dir == .up and con_tail);
+                try rect(renderer, .{
+                    .x=fx+@intCast(i32, if(cur_dir==.right) cur_pos.x else seg.x)*cell_size.w,
+                    .y=fy+@intCast(i32, if(cur_dir==.down) cur_pos.y else seg.y)*cell_size.h,
+                    .width=cx+cell_size.w*h,
+                    .height=cy+cell_size.h*v,
+                });
             }
 
-            prev = seg;   
+            prev = seg;
         }
     }
 };
