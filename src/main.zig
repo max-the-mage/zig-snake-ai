@@ -73,35 +73,40 @@ const arena = struct {
             const hcx = @divFloor(cell_size.w, 2);
             const hcy = @divFloor(cell_size.h, 2);
 
-            for (path) |item, i| {
-                const item_pos = .{.x=@intCast(i32, i%w), .y=@intCast(i32, i/w)};
-                switch (item) {
-                    .right => try renderer.drawLine(
-                        @intCast(i32, item_pos.x*cell_size.w+hcx),
-                        @intCast(i32, item_pos.y*cell_size.h+hcy),
-                        @intCast(i32, (item_pos.x+1)*cell_size.w+hcx)-1,
-                        @intCast(i32, item_pos.y*cell_size.h+hcy),
-                    ),
-                    .left => try renderer.drawLine(
-                        @intCast(i32, item_pos.x*cell_size.w+hcx),
-                        @intCast(i32, item_pos.y*cell_size.h+hcy),
-                        @intCast(i32, (item_pos.x-1)*cell_size.w+hcx)+1,
-                        @intCast(i32, item_pos.y*cell_size.h+hcy),
-                    ),
-                    .up => try renderer.drawLine(
-                        @intCast(i32, item_pos.x*cell_size.w+hcx),
-                        @intCast(i32, item_pos.y*cell_size.h+hcy),
-                        @intCast(i32, item_pos.x*cell_size.w+hcx),
-                        @intCast(i32, (item_pos.y-1)*cell_size.h+hcy)+1,
-                    ),
-                    .down => try renderer.drawLine(
-                        @intCast(i32, item_pos.x*cell_size.w+hcx),
-                        @intCast(i32, item_pos.y*cell_size.h+hcy),
-                        @intCast(i32, item_pos.x*cell_size.w+hcx),
-                        @intCast(i32, (item_pos.y+1)*cell_size.h+hcy)-1,
-                    ),
+            var cur_pos: Pos = .{.x=0, .y=0};
+            var base_pos: Pos = cur_pos;
+            var prev_dir: Direction = path[0];
+
+            var goal: Pos = .{.x=0, .y=0};
+
+            while (true) {
+                const new_dir = (try getPath(cur_pos.x, cur_pos.y)).*;
+
+                if (new_dir != prev_dir) {
+                    try renderer.drawLine(
+                        @intCast(i32, base_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, base_pos.y)*cell_size.h+hcy,
+                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                    );
+
+                    prev_dir = new_dir;
+                    base_pos = cur_pos;
+                }
+
+                cur_pos = cur_pos.move(new_dir);
+                if (cur_pos.isEqual(&goal)) {
+                    try renderer.drawLine(
+                        @intCast(i32, base_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, base_pos.y)*cell_size.h+hcy,
+                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                    );
+
+                    break;
                 }
             }
+            
         }
 
         try renderer.setColorRGB(0xf5, 0x00, 0x00);
@@ -288,6 +293,7 @@ pub fn main() !void {
         }
 
         if (@mod(frame, 1) == 0) {
+            per_run_timer.reset();
             var head = snake.body.items[0];
             var tail = snake.body.items[snake.body.items.len-1];
             snake.dir = (try arena.getPath(head.x, head.y)).*;
@@ -297,11 +303,7 @@ pub fn main() !void {
             var dist_next: isize = 1;
             var max_shortcut = @minimum(dist_apple, dist_tail-3);
 
-            if (dist_apple < dist_tail) {
-                max_shortcut -= 1;
-                // might run into some apples along the way
-                if ((dist_tail - dist_apple) * 4 > (arena.size-snake.body.items.len)) max_shortcut -= 10;
-            }
+            if (dist_apple < dist_tail) max_shortcut -= 1;
 
             if (snake.body.items.len > (arena.size*5)/8) max_shortcut = 0; // just follow the path when the board is mostly filled
             if (max_shortcut > 0) {
@@ -330,8 +332,6 @@ pub fn main() !void {
                 iterations += 1;
 
                 if (arena.benchmark == 0) break :mainLoop;
-
-                
 
                 if (log_freq != 0 and @mod(iterations, log_freq) == 0) 
                     std.log.err("run: {}, steps: {} time: {d:.4}s steps/apple: {d:.2}", .{
@@ -413,12 +413,7 @@ const Snake = struct {
         var head = &slice[0];
         var prev = slice[0];
 
-        switch (snake.dir) {
-            .right => head.x += 1,
-            .left => head.x -= 1,
-            .up => head.y -= 1,
-            .down => head.y += 1,
-        }
+        head.* = head.move(snake.dir);
 
         for (slice[1..]) |*item| {
             std.mem.swap(Pos, item, &prev); // no more accidental pointer conundrums
@@ -442,6 +437,8 @@ const Snake = struct {
         // TODO: improve path rendering with the same method as snake rendering
         if (arena.render_path) {
             var cur_pos = snake.body.items[0];
+            var base_pos = cur_pos;
+            var prev_dir: Direction = undefined;
 
             try renderer.setColorRGBA(0xfc, 0x74, 0x19, 0xf5);
 
@@ -455,10 +452,7 @@ const Snake = struct {
                 var dist_next: isize = 1;
                 var max_shortcut = @minimum(dist_apple, dist_tail-3);
 
-                if (dist_apple < dist_tail) {
-                    max_shortcut -= 1;
-                    if ((dist_tail - dist_apple) * 4 > (arena.size-snake.body.items.len)) max_shortcut -= 10;
-                }
+                if (dist_apple < dist_tail) max_shortcut -= 1;
 
                 if (snake.body.items.len > (arena.size*5)/8) max_shortcut = 0;
                 if (max_shortcut > 0) {
@@ -475,39 +469,28 @@ const Snake = struct {
                     }
                 }
 
-                switch (ideal_dir) {
-                    .right => try renderer.drawLine(
+                if (ideal_dir != prev_dir) {
+                    try renderer.drawLine(
+                        @intCast(i32, base_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, base_pos.y)*cell_size.h+hcy,
                         @intCast(i32, cur_pos.x)*cell_size.w+hcx,
                         @intCast(i32, cur_pos.y)*cell_size.h+hcy,
-                        @intCast(i32, (cur_pos.x+1))*cell_size.w+hcx-1,
-                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
-                    ),
-                    .left => try renderer.drawLine(
-                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
-                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
-                        @intCast(i32, (cur_pos.x-1))*cell_size.w+hcx+1,
-                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
-                    ),
-                    .up => try renderer.drawLine(
-                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
-                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
-                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
-                        @intCast(i32, (cur_pos.y-1))*cell_size.h+hcy+1,
-                    ),
-                    .down => try renderer.drawLine(
-                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
-                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
-                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
-                        @intCast(i32, cur_pos.y+1)*cell_size.h+hcy-1,
-                    ),
+                    );
+
+                    base_pos = cur_pos;
+                    prev_dir = ideal_dir;
                 }
 
-                switch (ideal_dir) {
-                    .right => cur_pos.x += 1,
-                    .left => cur_pos.x -= 1,
-                    .up => cur_pos.y -= 1,
-                    .down => cur_pos.y += 1,
+                cur_pos = cur_pos.move(ideal_dir);
+                if (cur_pos.isEqual(&arena.apple)) {
+                    try renderer.drawLine(
+                        @intCast(i32, base_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, base_pos.y)*cell_size.h+hcy,
+                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                    );
                 }
+
             }
         }
 
@@ -600,8 +583,7 @@ const Snake = struct {
             } else {
                 const h = @boolToInt((cur_dir == .left or cur_dir == .right) and con_tail);
                 const v = @boolToInt((cur_dir == .up or cur_dir == .down) and con_tail);
-                // const r = @boolToInt(cur_dir == .left and con_tail);
-                // const d = @boolToInt(cur_dir == .up and con_tail);
+
                 try rect(renderer, .{
                     .x=fx+@intCast(i32, if(cur_dir==.right) cur_pos.x else seg.x)*cell_size.w,
                     .y=fy+@intCast(i32, if(cur_dir==.down) cur_pos.y else seg.y)*cell_size.h,
