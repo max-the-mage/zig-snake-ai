@@ -20,6 +20,8 @@ pub fn build(b: *std.build.Builder) void {
     sdk.link(exe, .dynamic);
     exe.addPackage(sdk.getWrapperPackage("sdl2"));
     exe.addPackage(pkgs.clap);
+    exe.addPackage(pkgs.zgame_clock);
+    exe.addPackage(pkgs.adma);
     exe.setBuildMode(mode);
     exe.install();
 

@@ -2,6 +2,10 @@ const std = @import("std");
 const sdl = @import("sdl2");
 const clap = @import("clap");
 
+const clock = @import("zgame_clock");
+const Time = clock.Time;
+
+
 pub const abs = std.math.absInt;
 pub const divC = std.math.divCeil;
 pub const divF = std.math.divFloor;
@@ -17,8 +21,9 @@ const Snake = game.Snake;
 const rect = game.rect;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.GeneralPurposeAllocator(){};
     defer _ = gpa.deinit();
+    
     const ac = &gpa.allocator;
 
     const params = comptime [_]clap.Param(clap.Help){
@@ -28,7 +33,7 @@ pub fn main() !void {
         try clap.parseParam("-w, --wireframe Render snake body outlines"),
         try clap.parseParam("-b, --benchmark <NUM> Do render free benchmarking based on # of iterations"),
         try clap.parseParam("-z, --zoom Disable vsync to run as fast as possible"),
-        try clap.parseParam("-m, --messages <NUM> Amount of messages during benchmarking"),
+        try clap.parseParam("-i, --interval <NUM> Frequency of fps/benchmark messages in seconds"),
     };
 
     var args = try clap.parse(clap.Help, &params, .{});
@@ -46,7 +51,7 @@ pub fn main() !void {
         usize, args.option("--benchmark") orelse "0", 10 
     );
 
-    const messages = try std.fmt.parseUnsigned(usize, args.option("--messages") orelse "10", 10);
+    const interval = try std.fmt.parseFloat(f64, args.option("--interval") orelse "1.5");
 
     const size = try std.fmt.parseUnsigned(u32, args.option("--size") orelse "20", 10);
     arena.w = size;
@@ -74,8 +79,11 @@ pub fn main() !void {
     });
     defer sdl.quit();
 
-    defer window.destroy();
-    defer renderer.destroy();
+    
+    defer if (arena.benchmark == 0) {
+        renderer.destroy();
+        window.destroy();
+    };
 
     if (arena.benchmark == 0) {
 
@@ -141,9 +149,11 @@ pub fn main() !void {
     var iterations: usize = 0;
 
     var timer = try std.time.Timer.start();
-    var per_run_timer = try std.time.Timer.start();
+    var fps_timer = try std.time.Timer.start();
 
-    const log_freq = if (messages != 0) arena.benchmark/messages else 0;
+    var time = Time{};
+    time.fixed_time = @floatToInt(u64, interval*@intToFloat(f64, std.time.ns_per_s));
+
     mainLoop: while (true) {
         if (arena.benchmark == 0) {
             while (sdl.pollEvent()) |ev| {
@@ -155,7 +165,6 @@ pub fn main() !void {
         }
 
         if (@mod(frame, 1) == 0) {
-            per_run_timer.reset();
             var head = snake.body.items[0];
             var tail = snake.body.items[snake.body.items.len-1];
             snake.dir = (try arena.getPath(head.x, head.y)).*;
@@ -190,12 +199,13 @@ pub fn main() !void {
             total_steps += 1;
 
             if (snake.body.items.len == arena.size) {
-                const cur_lap = per_run_timer.lap();
+                const cur_lap = fps_timer.lap();
                 iterations += 1;
 
                 if (arena.benchmark == 0) break :mainLoop;
 
-                if (log_freq != 0 and @mod(iterations, log_freq) == 0) 
+                time.advance_frame(cur_lap);
+                if (time.step_fixed_update()) 
                     std.log.err("run: {}, steps: {} time: {d:.4}s steps/apple: {d:.2}", .{
                         iterations, steps, 
                         @intToFloat(f64, cur_lap)/@intToFloat(f64, std.time.ns_per_s),
@@ -218,7 +228,16 @@ pub fn main() !void {
             try snake.draw(&renderer);
 
             renderer.present();
+
+            time.advance_frame(fps_timer.lap());
+
+            if (time.step_fixed_update()) {
+                std.log.err("fps: {d:.3}", .{@intToFloat(f64, std.time.ns_per_s)/@intToFloat(f64, time.delta_time)});
+            }
         }
+
+        
+        
     }
     
     std.log.err("\ntime: {d:.4}s\niterations: {}\naverage steps: {d:.2}\nboard size: {}x{}", .{

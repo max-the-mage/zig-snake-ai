@@ -11,3 +11,15 @@ deps:
       git:
         url: "https://github.com/Hejsil/zig-clap.git"
         ref: zig-master
+  zgame_clock:
+    root: src/main.zig
+    src:
+      git:
+        url: "https://github.com/jojolepro/zgame_clock.git"
+        ref: main
+  adma:
+    root: src/adma.zig
+    src:
+      git:
+        url: "https://github.com/suirad/adma.git"
+        ref: master
