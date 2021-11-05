@@ -1,6 +1,7 @@
 const std = @import("std");
 const sdl = @import("sdl2");
 const clap = @import("clap");
+const adma = @import("adma");
 
 const clock = @import("zgame_clock");
 const Time = clock.Time;
@@ -21,10 +22,13 @@ const Snake = game.Snake;
 const rect = game.rect;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(){};
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
-    
-    const ac = &gpa.allocator;
+
+    const adma_ref = adma.AdmaAllocator.init();
+    defer adma_ref.deinit();
+
+    const ac = &adma_ref.allocator;
 
     const params = comptime [_]clap.Param(clap.Help){
         try clap.parseParam("-h, --help Display this and exit"),
@@ -206,7 +210,7 @@ pub fn main() !void {
 
                 time.advance_frame(cur_lap);
                 if (time.step_fixed_update()) 
-                    std.log.err("run: {}, steps: {} time: {d:.4}s steps/apple: {d:.2}", .{
+                    std.log.err("run: {}, steps: {} time: {d:.7}s steps/apple: {d:.2}", .{
                         iterations, steps, 
                         @intToFloat(f64, cur_lap)/@intToFloat(f64, std.time.ns_per_s),
                         @intToFloat(f32, steps+1)/@intToFloat(f32, arena.size)
@@ -232,17 +236,14 @@ pub fn main() !void {
             time.advance_frame(fps_timer.lap());
 
             if (time.step_fixed_update()) {
-                std.log.err("fps: {d:.3}", .{@intToFloat(f64, std.time.ns_per_s)/@intToFloat(f64, time.delta_time)});
+                std.log.err("fps: {d:.2}", .{@intToFloat(f64, std.time.ns_per_s)/@intToFloat(f64, time.delta_time)});
             }
         }
-
-        
-        
     }
-    
-    std.log.err("\ntime: {d:.4}s\niterations: {}\naverage steps: {d:.2}\nboard size: {}x{}", .{
-        @intToFloat(f64, timer.read())/@intToFloat(f64, std.time.ns_per_s),
-        iterations, @intToFloat(f64, total_steps)/@intToFloat(f64, iterations),
-        arena.w, arena.h
+
+    const t = @intToFloat(f64, timer.read())/@intToFloat(f64, std.time.ns_per_s);
+    std.log.err("summary\n\ttime: {d:.4}s\n\titerations: {}\n\taverage steps: {d:.2}\n\tboard size: {}x{}\n\tcycles/s : {d:.0}", .{
+        t,iterations, @intToFloat(f64, total_steps)/@intToFloat(f64, iterations),
+        arena.w, arena.h, @intToFloat(f64, total_steps)/t,
     });
 }
