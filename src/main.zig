@@ -7,7 +7,7 @@ const divC = std.math.divCeil;
 const divF = std.math.divFloor;
 const divT = std.math.divTrunc;
 
-const win = .{.w = 720, .h = 720};
+const win = .{.w = 800, .h = 800};
 
 const Size = struct {
     w: i32,
@@ -512,10 +512,12 @@ const Snake = struct {
         }
 
         //3/4 of cell size;
-        const cx = (try divF(i32, (arena.cell_size.w*3), 4));
-        const cy = (try divF(i32, (arena.cell_size.h*3), 4));
-        const fx = (try divF(i32, arena.cell_size.w, 8));
-        const fy = (try divF(i32, arena.cell_size.h, 8));
+        
+        const fx = (try divT(i32, arena.cell_size.w, 8));
+        const fy = (try divT(i32, arena.cell_size.h, 8));
+
+        const cx = fx*6;
+        const cy = fy*6;
 
         var prev: ?Pos = null;
 
