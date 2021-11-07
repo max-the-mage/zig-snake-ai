@@ -121,8 +121,10 @@ pub const arena = struct {
         var left = rand.boolean();
 
         const orig = new_pos;
-        
-        while (grid[new_pos] == .snake) {
+
+        var iter: usize = 0;
+        while (grid[new_pos] == .snake) : (iter += 1) {
+            if(iter == size) return; // loop board is full, give up
             if (left) {
                 if(new_pos == 0){left=false;new_pos=orig;}
                 else new_pos -= 1;

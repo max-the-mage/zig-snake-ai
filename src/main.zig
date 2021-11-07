@@ -22,8 +22,8 @@ const Snake = game.Snake;
 const rect = game.rect;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
+    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    // defer _ = gpa.deinit();
 
     const adma_ref = adma.AdmaAllocator.init();
     defer adma_ref.deinit();
@@ -36,8 +36,8 @@ pub fn main() !void {
         try clap.parseParam("-p, --paths Enable path rendering"),
         try clap.parseParam("-w, --wireframe Render snake body outlines"),
         try clap.parseParam("-b, --benchmark <NUM> Do render free benchmarking based on # of iterations"),
-        try clap.parseParam("-z, --zoom Disable vsync to run as fast as possible"),
-        try clap.parseParam("-i, --interval <NUM> Frequency of fps/benchmark messages in seconds"),
+        try clap.parseParam("-f, --fast Disable vsync to run as fast as possible"),
+        try clap.parseParam("-i, --interval <NUM> Interval of fps/benchmark messages in seconds"),
     };
 
     var args = try clap.parse(clap.Help, &params, .{});
@@ -55,7 +55,7 @@ pub fn main() !void {
         usize, args.option("--benchmark") orelse "0", 10 
     );
 
-    const interval = try std.fmt.parseFloat(f64, args.option("--interval") orelse "1.5");
+    const interval = try std.fmt.parseFloat(f64, args.option("--interval") orelse "1.0");
 
     const size = try std.fmt.parseUnsigned(u32, args.option("--size") orelse "20", 10);
     arena.w = size;
@@ -100,7 +100,7 @@ pub fn main() !void {
         
         renderer = try sdl.createRenderer(
             window, null, 
-            .{ .accelerated = true, .present_vsync=!args.flag("--zoom") }
+            .{ .accelerated = true, .present_vsync=!args.flag("--fast") }
         );
         try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
     }
@@ -213,12 +213,15 @@ pub fn main() !void {
                     std.log.err("run: {}, steps: {} time: {d:.7}s steps/apple: {d:.2}", .{
                         iterations, steps, 
                         @intToFloat(f64, cur_lap)/@intToFloat(f64, std.time.ns_per_s),
-                        @intToFloat(f32, steps+1)/@intToFloat(f32, arena.size)
+                        @intToFloat(f32, steps+1)/@intToFloat(f32, arena.size),
                     });
                 if (iterations == arena.benchmark) break :mainLoop;
 
                 steps = 0;
-                snake.body.shrinkAndFree(1);
+                // used instead of shrinkAndFree because:
+                // adma crashes when trying to shrink bucket sizes
+                // no real reason to free the snake body anyway, since it'll juts be reused anyway
+                snake.body.shrinkRetainingCapacity(1); 
                 snake.body.items[0] = Pos{.x=0, .y=0};
             }
         }

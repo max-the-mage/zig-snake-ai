@@ -1,25 +1,21 @@
 deps:
   SDL:
-    root: src/lib.zig
-    src:
-      git:
-        url: "https://github.com/MasterQ32/SDL.zig.git"
-        ref: master
+    git:
+      url: "https://github.com/MasterQ32/SDL.zig.git"
+      ref: master
+      root: src/lib.zig
   clap:
-    root: clap.zig
-    src:
-      git:
-        url: "https://github.com/Hejsil/zig-clap.git"
-        ref: zig-master
+    git:
+      url: "https://github.com/Hejsil/zig-clap.git"
+      ref: zig-master
+      root: clap.zig
   zgame_clock:
-    root: src/main.zig
-    src:
-      git:
-        url: "https://github.com/jojolepro/zgame_clock.git"
-        ref: main
+    git:
+      url: "https://github.com/jojolepro/zgame_clock.git"
+      ref: main
+      root: src/main.zig
   adma:
-    root: src/adma.zig
-    src:
-      git:
-        url: "https://github.com/suirad/adma.git"
-        ref: master
+    git:
+      url: "https://github.com/suirad/adma.git"
+      ref: master
+      root: src/adma.zig

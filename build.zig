@@ -18,7 +18,7 @@ pub fn build(b: *std.build.Builder) void {
     const sdk = Sdk.init(b);
     exe.setTarget(target);
     sdk.link(exe, .dynamic);
-    exe.addPackage(sdk.getWrapperPackage("sdl2"));
+    exe.addPackage(sdk.getWrapperPackage("sdl2")); // this links libc
     exe.addPackage(pkgs.clap);
     exe.addPackage(pkgs.zgame_clock);
     exe.addPackage(pkgs.adma);
