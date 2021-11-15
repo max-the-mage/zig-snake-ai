@@ -1,6 +1,8 @@
 const sdl = @import("sdl2");
 const std = @import("std");
 
+const Actor = @import("actor.zig").Actor;
+
 pub const abs = std.math.absInt;
 pub const divC = std.math.divCeil;
 pub const divF = std.math.divFloor;
@@ -12,6 +14,7 @@ pub const arena = struct {
     pub var size: u32 = undefined;
     pub var cell_size = Size{.w = 0, .h = 0};
     pub var rand: *std.rand.Random = undefined;
+    pub var snake = Snake{.body = undefined};
 
     pub var render_path = true;
     pub var wireframe = false;
@@ -25,8 +28,7 @@ pub const arena = struct {
     };
 
     pub var grid: []State = undefined;
-    pub var path: []Dir = undefined;
-    pub var path_order: []usize = undefined;
+
 
     pub var apple: Pos = undefined;
 
@@ -36,62 +38,10 @@ pub const arena = struct {
         return &grid[x+y*w];
     }
 
-    pub fn getPath(x: usize, y: usize) error{OutOfBounds}!*Dir {
-        if (x >= w) return error.OutOfBounds;
-        if (y >= h) return error.OutOfBounds;
-        return &path[x+y*w];
-    }
-
-    pub fn getPathOrder(x: usize, y: usize) *usize {
-        // if (x >= w) return error.OutOfBounds;
-        // if (y >= h) return error.OutOfBounds;
-        return &path_order[x+y*w];
-    }
-    
     pub fn draw(renderer: *sdl.Renderer) !void {
 
         // draw path
-        if (render_path) {
-            try renderer.setColorRGBA(5, 252, 240, 90);
-
-            const hcx = @divFloor(cell_size.w, 2);
-            const hcy = @divFloor(cell_size.h, 2);
-
-            var cur_pos: Pos = .{.x=0, .y=0};
-            var base_pos: Pos = cur_pos;
-            var prev_dir: Dir = path[0];
-
-            var goal: Pos = .{.x=0, .y=0};
-
-            while (true) {
-                const new_dir = (try getPath(cur_pos.x, cur_pos.y)).*;
-
-                if (new_dir != prev_dir) {
-                    try renderer.drawLine(
-                        @intCast(i32, base_pos.x)*cell_size.w+hcx,
-                        @intCast(i32, base_pos.y)*cell_size.h+hcy,
-                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
-                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
-                    );
-
-                    prev_dir = new_dir;
-                    base_pos = cur_pos;
-                }
-
-                cur_pos = cur_pos.move(new_dir);
-                if (cur_pos.isEqual(&goal)) {
-                    try renderer.drawLine(
-                        @intCast(i32, base_pos.x)*cell_size.w+hcx,
-                        @intCast(i32, base_pos.y)*cell_size.h+hcy,
-                        @intCast(i32, cur_pos.x)*cell_size.w+hcx,
-                        @intCast(i32, cur_pos.y)*cell_size.h+hcy,
-                    );
-
-                    break;
-                }
-            }
-            
-        }
+        
 
         try renderer.setColorRGB(0xf5, 0x00, 0x00);
         try rect(renderer, sdl.Rectangle{
@@ -171,14 +121,6 @@ pub const Pos = struct {
         return a.x == b.x and a.y == b.y;
     }
 
-    pub fn cycleDistance(a: *Pos, b: *Pos) isize {
-        const order_a = @intCast(isize, arena.getPathOrder(a.x, a.y).*);
-        const order_b = @intCast(isize, arena.getPathOrder(b.x, b.y).*);
-        if (order_a < order_b) return order_b - order_a;
-        
-        return order_b - order_a + arena.size;
-    }
-
     pub fn move(pos: Pos, dir: Dir) Pos {
         var p = pos;
         switch (dir) {
@@ -195,16 +137,15 @@ pub const Pos = struct {
 
 pub const Snake = struct {
     body: std.ArrayList(Pos),
-    dir: Dir = .right,
 
-    pub fn move(snake: *Snake) !void {
+    pub fn move(snake: *Snake, dir: Dir) !void {
         var slice = snake.body.items;
         var tail = slice[slice.len-1];
 
         var head = &slice[0];
         var prev = slice[0];
 
-        head.* = head.move(snake.dir);
+        head.* = head.move(dir);
 
         for (slice[1..]) |*item| {
             std.mem.swap(Pos, item, &prev); // no more accidental pointer conundrums
@@ -220,12 +161,11 @@ pub const Snake = struct {
         else (try arena.getCell(tail.x, tail.y)).* = .none; // remove the tail from the grid
     }
 
-    pub fn draw(snake: *Snake, renderer: *sdl.Renderer) !void {
+    pub fn draw(snake: *Snake, renderer: *sdl.Renderer, actor: *Actor) !void {
         const cell_size = arena.cell_size;
         const hcx = @divFloor(cell_size.w, 2);
         const hcy = @divFloor(cell_size.h, 2);
 
-        // TODO: improve path rendering with the same method as snake rendering
         if (arena.render_path) {
             var cur_pos = snake.body.items[0];
             var base_pos = cur_pos;
@@ -235,30 +175,7 @@ pub const Snake = struct {
 
             while (!cur_pos.isEqual(&arena.apple)) {
 
-                var tail = snake.body.items[snake.body.items.len-1];
-                var ideal_dir = (try arena.getPath(cur_pos.x, cur_pos.y)).*;
-
-                const dist_apple = cur_pos.cycleDistance(&arena.apple);
-                const dist_tail = cur_pos.cycleDistance(&tail);
-                var dist_next: isize = 1;
-                var max_shortcut = @minimum(dist_apple, dist_tail-3);
-
-                if (dist_apple < dist_tail) max_shortcut -= 1;
-
-                if (snake.body.items.len > (arena.size*5)/8) max_shortcut = 0;
-                if (max_shortcut > 0) {
-                    for (std.enums.values(Dir)) |dir| {
-                        var b = cur_pos.move(dir);
-
-                        if ((arena.getCell(b.x, b.y) catch &arena.State.snake).* != .snake) {
-                            const dist_b = cur_pos.cycleDistance(&b);
-                            if (dist_b <= max_shortcut and dist_b > dist_next) {
-                                ideal_dir = dir;
-                                dist_next = dist_b;
-                            }
-                        }
-                    }
-                }
+                const ideal_dir = actor.dir(cur_pos);
 
                 if (ideal_dir != prev_dir) {
                     try renderer.drawLine(
@@ -283,6 +200,8 @@ pub const Snake = struct {
                 }
 
             }
+
+            try actor.draw(renderer);
         }
 
         //3/4 of cell size;

@@ -6,13 +6,15 @@ const adma = @import("adma");
 const clock = @import("zgame_clock");
 const Time = clock.Time;
 
-
 pub const abs = std.math.absInt;
 pub const divC = std.math.divCeil;
 pub const divF = std.math.divFloor;
 pub const divT = std.math.divTrunc;
 
 const game = @import("game.zig");
+const actor = @import("actor.zig");
+const Actor = actor.Actor;
+
 const win = game.win;
 const arena = game.arena;
 const Pos = game.Pos;
@@ -67,12 +69,7 @@ pub fn main() !void {
     };
 
     arena.grid = try ac.alloc(arena.State, size*size);
-    arena.path = try ac.alloc(Dir, size*size);
-    arena.path_order = try ac.alloc(usize, size*size);
-
     defer ac.free(arena.grid);
-    defer ac.free(arena.path);
-    defer ac.free(arena.path_order);
 
     var renderer: sdl.Renderer = undefined;
     var window: sdl.Window = undefined;
@@ -82,7 +79,6 @@ pub fn main() !void {
         .audio = true,
     });
     defer sdl.quit();
-
     
     defer if (arena.benchmark == 0) {
         renderer.destroy();
@@ -107,9 +103,9 @@ pub fn main() !void {
 
     arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random();
 
-    var snake = Snake{
-        .body = std.ArrayList(Pos).init(ac),
-    };
+    arena.snake.body = std.ArrayList(Pos).init(ac);
+    var snake = &arena.snake;
+    
     defer snake.body.deinit();
     try snake.body.append(.{.x=0, .y=0});
 
@@ -117,33 +113,10 @@ pub fn main() !void {
         (try arena.getCell(pos.x, pos.y)).* = .snake;
     }
 
-    // create simple hamilton path
-    // note: this code only works on evenly sized grids
-    var i: usize  = 0;
-    while (i < arena.w) : (i+= 1) {
-        (try arena.getPath(i, 0)).* = .left; // line across top row
-        (try arena.getPath(i, arena.h-1)).* = if (i%2==0) .right else .up; // bottom zigzags
+    var phc = try actor.PerturbedHC.init(ac);
+    defer phc.deinit(ac);
 
-        // lines up and down
-        var j: usize = 1;
-        while(j < arena.h-1) : (j+=1) {
-            (try arena.getPath(i, j)).* = if (i%2==0) .down else .up;
-        }
 
-        if (i > 0 and i < arena.w-1) { // top zigzags
-            (try arena.getPath(i, 1)).* = if (i%2==0) .down else .right;
-        }
-    }
-    (try arena.getPath(0, 0)).* = .down; // top left corner
-
-    { // cycle ordering for skips
-        var cur_pos = Pos{.x=0, .y=0};
-        var ordering: usize = 0;
-        while (ordering < arena.size) : (ordering += 1) {
-            arena.getPathOrder(cur_pos.x, cur_pos.y).* = ordering;
-            cur_pos = cur_pos.move((try arena.getPath(cur_pos.x, cur_pos.y)).*);
-        }
-    }
 
     arena.newApple();
 
@@ -158,6 +131,7 @@ pub fn main() !void {
     var time = Time{};
     time.fixed_time = @floatToInt(u64, interval*@intToFloat(f64, std.time.ns_per_s));
 
+
     mainLoop: while (true) {
         if (arena.benchmark == 0) {
             while (sdl.pollEvent()) |ev| {
@@ -169,36 +143,8 @@ pub fn main() !void {
         }
 
         if (@mod(frame, 1) == 0) {
-            var head = snake.body.items[0];
-            var tail = snake.body.items[snake.body.items.len-1];
-            snake.dir = (try arena.getPath(head.x, head.y)).*;
-
-            const dist_apple = head.cycleDistance(&arena.apple);
-            const dist_tail = head.cycleDistance(&tail);
-            var dist_next: isize = 1;
-            var max_shortcut = @minimum(dist_apple, dist_tail-3);
-
-            if (dist_apple < dist_tail) max_shortcut -= 1;
-
-            if (snake.body.items.len > (arena.size*5)/8) max_shortcut = 0; // just follow the path when the board is mostly filled
-            if (max_shortcut > 0) {
-
-                // zig coming in clutch with fancy meta stuff
-                for (std.enums.values(Dir)) |dir| {
-                    var b = head.move(dir);
-
-                    if ((arena.getCell(b.x, b.y) catch &arena.State.snake).* != .snake) {
-                        const dist_b = head.cycleDistance(&b);
-                        if (dist_b <= max_shortcut and dist_b > dist_next) {
-                            snake.dir = dir;
-                            dist_next = dist_b;
-                        }
-                    }
-                }
-
-            }
-
-            try snake.move();
+            
+            try snake.move(phc.interface().dir(snake.body.items[0]));
             steps += 1;
             total_steps += 1;
 
@@ -232,7 +178,7 @@ pub fn main() !void {
             try renderer.clear();
             
             try arena.draw(&renderer);
-            try snake.draw(&renderer);
+            try snake.draw(&renderer, &phc.interface());
 
             renderer.present();
 
