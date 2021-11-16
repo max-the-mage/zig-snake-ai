@@ -125,8 +125,14 @@ pub fn main() !void {
     var total_steps: usize = 0;
     var iterations: usize = 0;
 
+    var run_times: []f64 = try ac.alloc(f64, arena.benchmark);
+    defer ac.free(run_times);
+
     var timer = try std.time.Timer.start();
     var fps_timer = try std.time.Timer.start();
+
+    var min_time: f64 = std.math.f64_max;
+    var max_time: f64 = 0.0;
 
     var time = Time{};
     time.fixed_time = @floatToInt(u64, interval*@intToFloat(f64, std.time.ns_per_s));
@@ -150,15 +156,19 @@ pub fn main() !void {
 
             if (snake.body.items.len == arena.size) {
                 const cur_lap = fps_timer.lap();
+                if (arena.benchmark == 0) break :mainLoop;
+
+                var tf = @intToFloat(f64, cur_lap)/@intToFloat(f64, std.time.ns_per_ms);
+                run_times[iterations] = tf;
                 iterations += 1;
 
-                if (arena.benchmark == 0) break :mainLoop;
+                max_time = @maximum(tf, max_time);
+                min_time = @minimum(tf, min_time);
 
                 time.advance_frame(cur_lap);
                 if (time.step_fixed_update()) 
-                    std.log.err("run: {}, steps: {} time: {d:.7}s steps/apple: {d:.2}", .{
-                        iterations, steps, 
-                        @intToFloat(f64, cur_lap)/@intToFloat(f64, std.time.ns_per_s),
+                    std.log.err("run: {}, steps: {} time: {d:.4}ms steps/apple: {d:.2}", .{
+                        iterations, steps, tf,
                         @intToFloat(f32, steps+1)/@intToFloat(f32, arena.size),
                     });
                 if (iterations == arena.benchmark) break :mainLoop;
@@ -190,9 +200,22 @@ pub fn main() !void {
         }
     }
 
-    const t = @intToFloat(f64, timer.read())/@intToFloat(f64, std.time.ns_per_s);
-    std.log.err("summary\n\ttime: {d:.4}s\n\titerations: {}\n\taverage steps: {d:.2}\n\tboard size: {}x{}\n\tcycles/s : {d:.0}", .{
-        t,iterations, @intToFloat(f64, total_steps)/@intToFloat(f64, iterations),
-        arena.w, arena.h, @intToFloat(f64, total_steps)/t,
-    });
+    const t = @intToFloat(f64, timer.read())/@intToFloat(f64, std.time.ns_per_ms);
+    const avg_time = t/@intToFloat(f64, iterations);
+
+    var dev: f64 = 0;
+    
+    for (run_times) |curt| {
+        dev += std.math.absFloat(curt-avg_time);
+    }
+    dev /= @intToFloat(f64, iterations);
+
+
+    std.log.err(
+        "summary\n\ttime: {d:.4}s\n\titerations: {}\n\taverage steps: {d:.2}\n\tboard size: {}x{}\n\tcycles/s: {d:.0}\n\tavg run: {d:.4}ms ±{d:.4}", 
+        .{
+            t/1000,iterations, @intToFloat(f64, total_steps)/@intToFloat(f64, iterations),
+            arena.w, arena.h, @intToFloat(f64, total_steps)/(t/1000), avg_time, dev,
+        }
+    );
 }
