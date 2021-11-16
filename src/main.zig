@@ -116,7 +116,7 @@ pub fn main() !void {
     var phc = try actor.PerturbedHC.init(ac);
     defer phc.deinit(ac);
 
-
+    const ai = phc.actor();
 
     arena.newApple();
 
@@ -144,7 +144,7 @@ pub fn main() !void {
 
         if (@mod(frame, 1) == 0) {
             
-            try snake.move(phc.interface().dir(snake.body.items[0]));
+            try snake.move(ai.dir(snake.body.items[0]));
             steps += 1;
             total_steps += 1;
 
@@ -178,7 +178,7 @@ pub fn main() !void {
             try renderer.clear();
             
             try arena.draw(&renderer);
-            try snake.draw(&renderer, &phc.interface());
+            try snake.draw(&renderer, &ai);
 
             renderer.present();
 

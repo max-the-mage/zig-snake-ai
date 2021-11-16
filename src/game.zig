@@ -161,7 +161,7 @@ pub const Snake = struct {
         else (try arena.getCell(tail.x, tail.y)).* = .none; // remove the tail from the grid
     }
 
-    pub fn draw(snake: *Snake, renderer: *sdl.Renderer, actor: *Actor) !void {
+    pub fn draw(snake: *Snake, renderer: *sdl.Renderer, actor: *const Actor) !void {
         const cell_size = arena.cell_size;
         const hcx = @divFloor(cell_size.w, 2);
         const hcy = @divFloor(cell_size.h, 2);

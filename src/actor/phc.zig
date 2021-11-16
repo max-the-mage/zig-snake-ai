@@ -4,7 +4,10 @@
 const std = @import("std");
 const Renderer = @import("sdl2").Renderer;
 
-const Actor = @import("../actor.zig").Actor;
+const act = @import("../actor.zig");
+const Actor = act.Actor;
+const AnyActor = act.AnyActor;
+
 const game = @import("../game.zig");
 const Pos = game.Pos;
 const Dir = game.Dir;
@@ -18,7 +21,7 @@ pub const PerturbedHC = struct {
     path_order: []usize,
 
     pub fn init(ac: *std.mem.Allocator) !PerturbedHC {
-        var actor = PerturbedHC{
+        var new = PerturbedHC{
             .path = try ac.alloc(game.Dir, arena.size),
             .path_order = try ac.alloc(usize, arena.size),
         };
@@ -27,31 +30,31 @@ pub const PerturbedHC = struct {
         // note: this code only works on evenly sized grids
         var i: usize  = 0;
         while (i < arena.w) : (i+= 1) {
-            (try actor.getPath(i, 0)).* = .left; // line across top row
-            (try actor.getPath(i, arena.h-1)).* = if (i%2==0) .right else .up; // bottom zigzags
+            (try new.getPath(i, 0)).* = .left; // line across top row
+            (try new.getPath(i, arena.h-1)).* = if (i%2==0) .right else .up; // bottom zigzags
 
             // lines up and down
             var j: usize = 1;
             while(j < arena.h-1) : (j+=1) {
-                (try actor.getPath(i, j)).* = if (i%2==0) .down else .up;
+                (try new.getPath(i, j)).* = if (i%2==0) .down else .up;
             }
 
             if (i > 0 and i < arena.w-1) { // top zigzags
-                (try actor.getPath(i, 1)).* = if (i%2==0) .down else .right;
+                (try new.getPath(i, 1)).* = if (i%2==0) .down else .right;
             }
         }
-        (try actor.getPath(0, 0)).* = .down; // top left corner
+        (try new.getPath(0, 0)).* = .down; // top left corner
 
         { // cycle ordering for skips
             var cur_pos = Pos{.x=0, .y=0};
             var ordering: usize = 0;
             while (ordering < arena.size) : (ordering += 1) {
-                actor.getPathOrder(cur_pos.x, cur_pos.y).* = ordering;
-                cur_pos = cur_pos.move((try actor.getPath(cur_pos.x, cur_pos.y)).*);
+                new.getPathOrder(cur_pos.x, cur_pos.y).* = ordering;
+                cur_pos = cur_pos.move((try new.getPath(cur_pos.x, cur_pos.y)).*);
             }
         }
 
-        return actor;
+        return new;
     }
 
     pub fn deinit(self: *Self, ac: *std.mem.Allocator) void {
@@ -59,16 +62,11 @@ pub const PerturbedHC = struct {
         ac.free(self.path_order);
     }
 
-    pub fn interface(self: *Self) Actor {
-        return .{
-            .impl = @ptrCast(*c_void, self),
-            .dirFn = phcDir,
-            .drawFn = phcDraw,
-        };
+    pub fn actor(self: *Self) Actor {
+        return Actor.init(self, phcDir, phcDraw);
     }
 
-    fn phcDir(self_void: *c_void, cur_head: Pos) Dir {
-        var self = @ptrCast(*PerturbedHC, @alignCast(@alignOf(PerturbedHC), self_void));
+    fn phcDir(self: *Self, cur_head: Pos) Dir {
 
         var snake = &arena.snake;
 
@@ -103,8 +101,7 @@ pub const PerturbedHC = struct {
         return dir;
     }
 
-    fn phcDraw(self_void: *c_void, renderer: *Renderer) !void {
-        var self = @ptrCast(*PerturbedHC, @alignCast(@alignOf(PerturbedHC), self_void));
+    fn phcDraw(self: *Self, renderer: *Renderer) !void {
 
         if (arena.render_path) {
             try renderer.setColorRGBA(5, 252, 240, 90);
