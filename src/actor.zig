@@ -2,6 +2,7 @@ const Dir = @import("game.zig").Dir;
 const Pos = @import("game.zig").Pos;
 const Renderer = @import("sdl2").Renderer;
 
+// TODO: Improve actor interface with AnyActor opaque type
 pub const Actor = struct {
     impl: *c_void,
 

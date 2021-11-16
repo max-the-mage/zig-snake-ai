@@ -8,6 +8,10 @@ pub const divC = std.math.divCeil;
 pub const divF = std.math.divFloor;
 pub const divT = std.math.divTrunc;
 
+// TODO: replace the arena with a "game" or "board" struct with a proper init function, can be passed to fucntions
+// TODO: move Pos, Dir, and Size to a new file
+// TODO: replace u32 with i32 for sdl interop and to avoid them stupid @intCast calls
+
 pub const arena = struct {
     pub var w: u32 = undefined;
     pub var h: u32 = undefined;
@@ -29,7 +33,6 @@ pub const arena = struct {
 
     pub var grid: []State = undefined;
 
-
     pub var apple: Pos = undefined;
 
     pub fn getCell(x: usize, y: usize) error{OutOfBounds}!*arena.State {
@@ -39,9 +42,6 @@ pub const arena = struct {
     }
 
     pub fn draw(renderer: *sdl.Renderer) !void {
-
-        // draw path
-        
 
         try renderer.setColorRGB(0xf5, 0x00, 0x00);
         try rect(renderer, sdl.Rectangle{
@@ -167,6 +167,8 @@ pub const Snake = struct {
         const hcy = @divFloor(cell_size.h, 2);
 
         if (arena.render_path) {
+            try actor.draw(renderer);
+
             var cur_pos = snake.body.items[0];
             var base_pos = cur_pos;
             var prev_dir: Dir = undefined;
@@ -200,12 +202,9 @@ pub const Snake = struct {
                 }
 
             }
-
-            try actor.draw(renderer);
         }
 
         //3/4 of cell size;
-        
         const fx = (try divT(i32, arena.cell_size.w, 8));
         const fy = (try divT(i32, arena.cell_size.h, 8));
 

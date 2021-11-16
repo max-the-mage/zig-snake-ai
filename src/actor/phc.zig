@@ -12,6 +12,8 @@ const arena = game.arena;
 
 pub const PerturbedHC = struct {
 
+    pub const Self = @This();
+
     path: []game.Dir,
     path_order: []usize,
 
@@ -52,12 +54,12 @@ pub const PerturbedHC = struct {
         return actor;
     }
 
-    pub fn deinit(self: *@This(), ac: *std.mem.Allocator) void {
+    pub fn deinit(self: *Self, ac: *std.mem.Allocator) void {
         ac.free(self.path);
         ac.free(self.path_order);
     }
 
-    pub fn interface(self: *@This()) Actor {
+    pub fn interface(self: *Self) Actor {
         return .{
             .impl = @ptrCast(*c_void, self),
             .dirFn = phcDir,
@@ -96,7 +98,6 @@ pub const PerturbedHC = struct {
                     }
                 }
             }
-
         }
 
         return dir;
