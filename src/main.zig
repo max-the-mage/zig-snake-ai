@@ -1,15 +1,20 @@
 const std = @import("std");
+const abs = std.math.absInt;
+const divC = std.math.divCeil;
+const divF = std.math.divFloor;
+const divT = std.math.divTrunc;
+
+const ascii = std.ascii;
+const meta = std.meta;
+
+const declInfo = meta.declarationInfo;
+
 const sdl = @import("sdl2");
 const clap = @import("clap");
 const adma = @import("adma");
 
 const clock = @import("zgame_clock");
 const Time = clock.Time;
-
-pub const abs = std.math.absInt;
-pub const divC = std.math.divCeil;
-pub const divF = std.math.divFloor;
-pub const divT = std.math.divTrunc;
 
 const game = @import("game.zig");
 const actor = @import("actor.zig");
@@ -34,7 +39,7 @@ pub fn main() !void {
 
     const params = comptime [_]clap.Param(clap.Help){
         try clap.parseParam("-h, --help Display this and exit"),
-        try clap.parseParam("-a, --actor <STR> Chose an actor, currently either phc or zz"),
+        try clap.parseParam("-a, --actor <STR> Chose an actor,"),
         try clap.parseParam("-s, --size <NUM> Snake board size"),
         try clap.parseParam("-p, --paths Enable path rendering"),
         try clap.parseParam("-w, --wireframe Render snake body outlines"),
@@ -48,6 +53,7 @@ pub fn main() !void {
 
     if (args.flag("--help")) {
         try clap.help(std.io.getStdErr().writer(), &params);
+        try _write_types();
         std.os.exit(0);
     }
 
@@ -102,8 +108,6 @@ pub fn main() !void {
         try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
     }
 
-    
-
     arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random();
 
     arena.snake.body = std.ArrayList(Pos).init(ac);
@@ -116,27 +120,36 @@ pub fn main() !void {
         (try arena.getCell(pos.x, pos.y)).* = .snake;
     }
 
-    var phc: ?actor.PerturbedHC = null;
-    var zz: ?actor.ZigZag = null;
-    defer {
-        if (phc) |*a| {a.deinit(ac);}
-        if (zz) |*a| {a.deinit(ac);}
-    }
 
+    // FIXME: this is still pretty bad, a bit better
+    // but doesn't deinit allocated memory (still working out the defer stuff on that)
+    // might need to do the tagged union meta stuff after all, that way an actor can decide what
+    // to have in it's init function and it'll be properly freed
+    // also I discovered a compiler bug related to breaking a block from inside an inline for loop
+    // also also zig doesn't like casting a zero size type to an opaque type
     const act_str = args.option("--actor");
-    var ai = blk: {
-        if (act_str) |a| {
-            if(std.mem.eql(u8, a, "phc")) break :blk (try actor.PerturbedHC.init(ac)).actor();
-            if(std.mem.eql(u8, a, "zz")) break :blk (try actor.ZigZag.init(ac)).actor();
 
-            std.log.err("{s} is not a valid actor", .{a});
-            std.os.exit(0);
+    var ai: Actor = undefined;
+    if (act_str) |ac_real| {
+        inline for (actor.actor_names) |name| {
+            if (
+                ascii.eqlIgnoreCase(name.short, ac_real) or
+                ascii.eqlIgnoreCase(name.long, ac_real)
+            ) {
+                ai = (try name.Type.init(ac)).actor();
+                break;
+            }
         } else {
-            std.log.err("an actor must be specified", .{});
-            try clap.help(std.io.getStdErr().writer(), &params);
+            std.log.err("{s} is not a valid actor", .{ac_real});
+            try _write_types();
             std.os.exit(0);
         }
-    };
+    } else {
+        std.log.err("an actor must be specified", .{});
+        try clap.help(std.io.getStdErr().writer(), &params);
+        try _write_types();
+        std.os.exit(0);
+    }
 
     arena.newApple();
 
@@ -239,4 +252,12 @@ pub fn main() !void {
             @intToFloat(f64, total_steps)/(t/1000), avg_time, dev,
         }
     );
+}
+
+fn _write_types() !void {
+    const writer = std.io.getStdErr().writer();
+    _ = try writer.write("Currently avaliable actors:\n");
+    inline for (actor.actor_names) |name| {
+        _ = try writer.print("\t{s} or {s}\n", .{name.long, name.short});
+    }
 }

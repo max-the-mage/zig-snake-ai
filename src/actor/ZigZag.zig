@@ -3,11 +3,10 @@
 
 const std = @import("std");
 const Renderer = @import("sdl2").Renderer;
-const Rect = @import("sdl2").Rect;
+const Rect = @import("sdl2").Rectangle;
 
 const act = @import("../actor.zig");
 const Actor = act.Actor;
-const AnyActor = act.AnyActor;
 
 const game = @import("../game.zig");
 const Pos = game.Pos;

@@ -8,7 +8,7 @@ pub const divC = std.math.divCeil;
 pub const divF = std.math.divFloor;
 pub const divT = std.math.divTrunc;
 
-// TODO: replace the arena with a "game" or "board" struct with a proper init function, can be passed to functions (paramaterize globals);
+// TODO: this is terrible shared global state garbage, replace the arena with a "game" or "board" struct with a proper init function, can be passed to functions (paramaterize globals);
 // TODO: move Pos, Dir, and Size to a new file
 // TODO: replace u32 with i32 for sdl interop and to avoid them stupid @intCast calls
 

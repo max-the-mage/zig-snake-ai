@@ -1,3 +1,4 @@
+// TODO: How the fuck does this work
 // TODO: actually implement this
 
 const Renderer = @import("sdl2").Renderer;
@@ -17,7 +18,6 @@ const Allocator = @import("std").mem.Allocator;
 pub fn init(_: *Allocator) !Self {
     return Self{.a = 0};
 }
-
 
 pub fn deinit(_: *Self, _: *Allocator) !void {
     return;

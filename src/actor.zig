@@ -1,8 +1,9 @@
+const std = @import("std");
+const assert = std.debug.assert;
+
 const Dir = @import("game.zig").Dir;
 const Pos = @import("game.zig").Pos;
 const Renderer = @import("sdl2").Renderer;
-
-const assert = @import("std").debug.assert;
 
 pub const AnyActor = opaque {};
 pub const Actor = struct {
@@ -50,6 +51,45 @@ pub const Actor = struct {
     }
 };
 
-pub const PerturbedHC = @import("actor/PerturbedHC.zig");
-pub const ZigZag = @import("actor/ZigZag.zig");
-pub const DynamicHCRepair = @import("actor/DynamicHCRepair.zig");
+const decls = std.meta.declarations;
+
+pub const ActorName = struct{
+    Type: type,
+    short: []const u8,
+    long: []const u8,
+
+    fn init(comptime T: type) ActorName {
+        return .{
+            .Type = T,
+            .short = blk: {
+                var base = @as([]const u8, "");
+
+                for(@typeName(T)) |chr| {
+                    if (std.ascii.isUpper(chr)) base = base ++ [1]u8{std.ascii.toLower(chr)};
+                }
+                break :blk base;
+            },
+            .long = @typeName(T),
+        };
+    }
+};
+
+const impls = struct{
+    pub const PerturbedHC = @import("actor/PerturbedHC.zig");
+    pub const ZigZag = @import("actor/ZigZag.zig");
+    pub const DynamicHCRepair = @import("actor/DynamicHCRepair.zig");
+    pub const CellTree = @import("actor/CellTree.zig");
+    pub const FixedRandom = @import("actor/FixedRandom.zig");
+};
+pub usingnamespace impls;
+
+const decl_list = decls(impls);
+pub const actor_names: [decl_list.len]ActorName = blk: {
+    var names: [decl_list.len]ActorName = undefined;
+
+    inline for (decl_list) |decl, i| {
+        names[i] = ActorName.init(decl.data.Type);
+    }
+
+    break :blk names;
+};

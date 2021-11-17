@@ -1,3 +1,6 @@
+// TODO: fixed but random hamiltonian cycle
+// NOTE: maybe have a single actor "FixedCycle" that can choose from either a random path or a zigzag path.
+// NOTE: FixedCycle will call a function to generate a random path. May be able to use this with phc as well
 // TODO: actually implement this
 
 const Renderer = @import("sdl2").Renderer;
