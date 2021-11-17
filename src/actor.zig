@@ -51,3 +51,4 @@ pub const Actor = struct {
 };
 
 pub const PerturbedHC = @import("actor/phc.zig").PerturbedHC;
+pub const ZigZag = @import("actor/zig_zag.zig").ZigZag;

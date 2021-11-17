@@ -34,6 +34,7 @@ pub fn main() !void {
 
     const params = comptime [_]clap.Param(clap.Help){
         try clap.parseParam("-h, --help Display this and exit"),
+        try clap.parseParam("-a, --actor <STR> Chose an actor, currently either phc or zz"),
         try clap.parseParam("-s, --size <NUM> Snake board size"),
         try clap.parseParam("-p, --paths Enable path rendering"),
         try clap.parseParam("-w, --wireframe Render snake body outlines"),
@@ -101,6 +102,8 @@ pub fn main() !void {
         try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
     }
 
+    
+
     arena.rand = &std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random();
 
     arena.snake.body = std.ArrayList(Pos).init(ac);
@@ -113,10 +116,27 @@ pub fn main() !void {
         (try arena.getCell(pos.x, pos.y)).* = .snake;
     }
 
-    var phc = try actor.PerturbedHC.init(ac);
-    defer phc.deinit(ac);
+    var phc: ?actor.PerturbedHC = null;
+    var zz: ?actor.ZigZag = null;
+    defer {
+        if (phc) |*a| {a.deinit(ac);}
+        if (zz) |*a| {a.deinit(ac);}
+    }
 
-    const ai = phc.actor();
+    const act_str = args.option("--actor");
+    var ai = blk: {
+        if (act_str) |a| {
+            if(std.mem.eql(u8, a, "phc")) break :blk (try actor.PerturbedHC.init(ac)).actor();
+            if(std.mem.eql(u8, a, "zz")) break :blk (try actor.ZigZag.init(ac)).actor();
+
+            std.log.err("{s} is not a valid actor", .{a});
+            std.os.exit(0);
+        } else {
+            std.log.err("an actor must be specified", .{});
+            try clap.help(std.io.getStdErr().writer(), &params);
+            std.os.exit(0);
+        }
+    };
 
     arena.newApple();
 
@@ -125,7 +145,7 @@ pub fn main() !void {
     var total_steps: usize = 0;
     var iterations: usize = 0;
 
-    var run_times: []f64 = try ac.alloc(f64, arena.benchmark);
+    var run_times: []f64 = try ac.alloc(f64, if (arena.benchmark==0) 1 else arena.benchmark);
     defer ac.free(run_times);
 
     var timer = try std.time.Timer.start();
@@ -156,11 +176,11 @@ pub fn main() !void {
 
             if (snake.body.items.len == arena.size) {
                 const cur_lap = fps_timer.lap();
-                if (arena.benchmark == 0) break :mainLoop;
 
                 var tf = @intToFloat(f64, cur_lap)/@intToFloat(f64, std.time.ns_per_ms);
                 run_times[iterations] = tf;
                 iterations += 1;
+                if (arena.benchmark == 0) break :mainLoop;
 
                 max_time = @maximum(tf, max_time);
                 min_time = @minimum(tf, min_time);
@@ -212,10 +232,11 @@ pub fn main() !void {
 
 
     std.log.err(
-        "summary\n\ttime: {d:.4}s\n\titerations: {}\n\taverage steps: {d:.2}\n\tboard size: {}x{}\n\tcycles/s: {d:.0}\n\tavg run: {d:.4}ms ±{d:.4}", 
+        "summary\n\tboard size: {}x{}, actor: {s}\n\ttime: {d:.4}s\n\titerations: {}\n\taverage steps: {d:.2}\n\tcycles/s: {d:.0}\n\tavg run: {d:.4}ms ±{d:.4}", 
         .{
-            t/1000,iterations, @intToFloat(f64, total_steps)/@intToFloat(f64, iterations),
-            arena.w, arena.h, @intToFloat(f64, total_steps)/(t/1000), avg_time, dev,
+            arena.w, arena.h, act_str, t/1000,iterations, 
+            @intToFloat(f64, total_steps)/@intToFloat(f64, iterations),
+            @intToFloat(f64, total_steps)/(t/1000), avg_time, dev,
         }
     );
 }
