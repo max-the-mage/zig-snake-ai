@@ -42,7 +42,7 @@ pub const Game = struct{
     cell_size: Size,
     alloc: *std.mem.Allocator,
     rand: *std.rand.Random,
-    snake: Snake,
+    snake: std.ArrayList(Pos),
     config: Config,
     board: Board,
 
@@ -51,9 +51,7 @@ pub const Game = struct{
             .cell_size = .{.w = @divTrunc(win.w, size), .h = @divTrunc(win.h, size)},
             .alloc = ac,
             .rand = r,
-            .snake = Snake{
-                .body = try std.ArrayList(Pos).initCapacity(ac, @intCast(usize, size*size)),
-            },
+            .snake = try std.ArrayList(Pos).initCapacity(ac, @intCast(usize, size*size)),
             .config = cfg,
             .board = Board{
                 .size = Size{.w = size, .h = size},
@@ -61,7 +59,7 @@ pub const Game = struct{
                 .food = Pos{.x=0, .y=0},
             },
         };
-        try new_game.snake.body.append(.{.x = 0, .y = 0});
+        try new_game.snake.append(.{.x = 0, .y = 0});
         new_game.board.grid[0] = .snake;
         new_game.newApple();
 
@@ -69,18 +67,18 @@ pub const Game = struct{
     }
 
     pub fn reset(self: *Game) void {
-        self.snake.body.shrinkRetainingCapacity(1);
+        self.snake.shrinkRetainingCapacity(1);
         for (self.board.grid) |*cell| {
             cell.* = .none;
         }
         self.board.grid[0] = .snake;
-        self.snake.body.items[0] = .{.x = 0, .y = 0};
+        self.snake.items[0] = .{.x = 0, .y = 0};
         self.newApple();
     }
 
     pub fn deinit(self: *Game) void {
         self.alloc.free(self.board.grid);
-        self.snake.body.deinit();
+        self.snake.deinit();
     }
 
     pub fn draw(self: *Game, renderer: *sdl.Renderer, act: *const Actor) !void {
@@ -115,7 +113,7 @@ pub const Game = struct{
             if (self.config.draw_ai_data) {
                 try act.draw(renderer);
 
-                var cur_pos = self.snake.body.items[0];
+                var cur_pos = self.snake.items[0];
                 var base_pos = cur_pos;
                 var prev_dir: Dir = undefined;
 
@@ -159,20 +157,20 @@ pub const Game = struct{
 
             var prev: ?Pos = null;
 
-            var cur_pos: Pos = self.snake.body.items[0];
+            var cur_pos: Pos = self.snake.items[0];
             var cur_dir: Dir = undefined;
 
             var col = sdl.Color.rgb(0, 255, 0);
 
             var con_tail = false;
 
-            for (self.snake.body.items) |_, i| {
-                var seg = self.snake.body.items[i];
+            for (self.snake.items) |_, i| {
+                var seg = self.snake.items[i];
 
                 try renderer.setColor(col);
 
-                if (i != self.snake.body.items.len-1) {
-                    var next = self.snake.body.items[i+1];
+                if (i != self.snake.items.len-1) {
+                    var next = self.snake.items[i+1];
 
                     const diff_x = @intCast(isize, next.x) - @intCast(isize, seg.x);
                     const diff_y = @intCast(isize, next.y) - @intCast(isize, seg.y);
@@ -197,11 +195,11 @@ pub const Game = struct{
                         cur_dir = dir_next;
                     }
 
-                    if (cur_dir != dir_next or i == self.snake.body.items.len-2) {
+                    if (cur_dir != dir_next or i == self.snake.items.len-2) {
 
                         // incorporate tail into final segment                    
-                        if (i == self.snake.body.items.len-2) {
-                            if (cur_dir == dir_next) seg = self.snake.body.items[self.snake.body.items.len-1]
+                        if (i == self.snake.items.len-2) {
+                            if (cur_dir == dir_next) seg = self.snake.items[self.snake.items.len-1]
                             else con_tail=true;
                         }
                         
@@ -278,7 +276,7 @@ pub const Game = struct{
     }
 
     pub fn step(self: *Game, act: *const Actor) !void {
-        var slice = self.snake.body.items;
+        var slice = self.snake.items;
         var tail = slice[slice.len-1];
 
         var head = &slice[0];
@@ -294,8 +292,8 @@ pub const Game = struct{
         (try self.board.cellPtr(head.x, head.y)).* = .snake;
 
         if (head.isEqual(self.board.food)) { 
-            try self.snake.body.append(tail);
-            if (self.snake.body.items.len < self.board.size.area()) self.newApple();
+            try self.snake.append(tail);
+            if (self.snake.items.len < self.board.size.area()) self.newApple();
         }
         else (try self.board.cellPtr(tail.x, tail.y)).* = .none; // remove the tail from the grid
     }
@@ -337,8 +335,4 @@ pub const Pos = struct {
 
         return p;
     }
-};
-
-pub const Snake = struct {
-    body: std.ArrayList(Pos),
 };

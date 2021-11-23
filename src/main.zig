@@ -180,7 +180,7 @@ pub fn main() !void {
         steps += 1;
         total_steps += 1;
 
-        if (game.snake.body.items.len == game.board.size.area()) {
+        if (game.snake.items.len == game.board.size.area()) {
             const cur_lap = fps_timer.lap();
 
             var tf = @intToFloat(f64, cur_lap)/@intToFloat(f64, std.time.ns_per_ms);

@@ -121,7 +121,7 @@ fn phcDir(self: *Self, cur_head: Pos) Dir {
     var snake = &self.game.snake;
 
     var head = cur_head;
-    var tail = snake.body.items[snake.body.items.len-1];
+    var tail = snake.items[snake.items.len-1];
     var dir = (self.getPath(head.x, head.y) catch unreachable).*;
 
     const dist_apple = self.cycleDistance(&head, &self.game.board.food);
@@ -131,7 +131,7 @@ fn phcDir(self: *Self, cur_head: Pos) Dir {
 
     if (dist_apple < dist_tail) max_shortcut -= 1;
 
-    if (snake.body.items.len > (self.game.board.size.area()*5)/8) max_shortcut = 0; // just follow the path when the board is mostly filled
+    if (snake.items.len > (self.game.board.size.area()*5)/8) max_shortcut = 0; // just follow the path when the board is mostly filled
     if (max_shortcut > 0) {
 
         // zig coming in clutch with fancy meta stuff
