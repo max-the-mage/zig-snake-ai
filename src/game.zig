@@ -115,17 +115,17 @@ pub const Game = struct{
             food,
         };
 
+        size: Size,
         grid: []State,
         food: Pos,
 
-        pub fn cellPtr(x: usize, y: usize) error{OutOfBounds}!*State {
-            if (x >= w) return error.OutOfBounds;
-            if (y >= h) return error.OutOfBounds;
-            return &grid[x+y*w];
+        pub fn cellPtr(self: *Board, x: usize, y: usize) error{OutOfBounds}!*State {
+            if (x >= self.size.w) return error.OutOfBounds;
+            if (y >= self.size.h) return error.OutOfBounds;
+            return &self.grid[x+y*self.size.w];
         }
     };
 
-    size: Size,
     cell_size: Size,
     alloc: *std.mem.Allocator,
     rand: *std.rand.Random,
@@ -135,7 +135,6 @@ pub const Game = struct{
 
     pub fn init(size: i32, ac: *std.mem.Allocator, cfg: Config) !Game {
         return Game{
-            .size = .{.w = size, .h = size},
             .cell_size = .{.w = @divFloor(win.w, size), .h = @divFloor(win.h, size)},
             .alloc = ac,
             .rand = std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random(),
@@ -144,6 +143,7 @@ pub const Game = struct{
             },
             .config = cfg,
             .board = Board{
+                .size = Size{.w = size, .h = size},
                 .grid = ac.alloc(Board.State, size*size),
                 .food = Pos{.x=0, .y=0},
             },
@@ -156,7 +156,7 @@ pub const Size = struct{
     h: i32,
 
     pub fn area(self: *Size) i32 {
-        return w*h;
+        return self.w*self.h;
     }
 };
 
