@@ -12,16 +12,25 @@ const Pos = g.Pos;
 const Dir = g.Dir;
 const Game = g.Game;
 
+const Line = struct {
+    x1: i32,
+    y1: i32,
+    x2: i32,
+    y2: i32,
+};
+
 const Self = @This();
 
 path: []Dir,
 path_order: []isize,
+lines: std.ArrayList(Line),
 game: *Game,
 
 pub fn init(game: *Game) !Self {
     var new = Self{
         .path = try game.alloc.alloc(Dir, game.board.size.area()),
         .path_order = try game.alloc.alloc(isize, game.board.size.area()),
+        .lines = std.ArrayList(Line).init(game.alloc),
         .game = game,
     };
 
@@ -53,12 +62,54 @@ pub fn init(game: *Game) !Self {
         }
     }
 
+    { // create lines to render
+        const cell_size = game.cell_size;
+
+        const hcx = @divFloor(cell_size.w, 2);
+        const hcy = @divFloor(cell_size.h, 2);
+
+        var cur_pos: Pos = .{.x=0, .y=0};
+        var base_pos: Pos = cur_pos;
+        var prev_dir: Dir = new.path[0];
+
+        var goal: Pos = .{.x=0, .y=0};
+
+        while (true) {
+            const new_dir = (try new.getPath(cur_pos.x, cur_pos.y)).*;
+
+            if (new_dir != prev_dir) {
+                try new.lines.append(.{
+                    .x1=@intCast(i32, base_pos.x)*cell_size.w+hcx,
+                    .y1=@intCast(i32, base_pos.y)*cell_size.h+hcy,
+                    .x2=@intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                    .y2=@intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                });
+
+                prev_dir = new_dir;
+                base_pos = cur_pos;
+            }
+
+            cur_pos = cur_pos.move(new_dir);
+            if (cur_pos.isEqual(goal)) {
+                try new.lines.append(.{
+                    .x1=@intCast(i32, base_pos.x)*cell_size.w+hcx,
+                    .y1=@intCast(i32, base_pos.y)*cell_size.h+hcy,
+                    .x2=@intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                    .y2=@intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                });
+
+                break;
+            }
+        }
+    }
+
     return new;
 }
 
 pub fn deinit(self: *Self) void {
     self.game.alloc.free(self.path);
     self.game.alloc.free(self.path_order);
+    self.lines.deinit();
 }
 
 pub fn actor(self: *Self) Actor {
@@ -103,49 +154,15 @@ fn phcDir(self: *Self, cur_head: Pos) Dir {
 }
 
 fn phcDraw(self: *Self, renderer: *Renderer) !void {
-
     if (self.game.config.draw_ai_data) {
         try renderer.setColorRGBA(5, 252, 240, 90);
 
-        const cell_size = self.game.cell_size;
-
-        const hcx = @divFloor(cell_size.w, 2);
-        const hcy = @divFloor(cell_size.h, 2);
-
-        var cur_pos: Pos = .{.x=0, .y=0};
-        var base_pos: Pos = cur_pos;
-        var prev_dir: Dir = self.path[0];
-
-        var goal: Pos = .{.x=0, .y=0};
-
-        while (true) {
-            const new_dir = (try self.getPath(cur_pos.x, cur_pos.y)).*;
-
-            if (new_dir != prev_dir) {
-                try renderer.drawLine(
-                    @intCast(i32, base_pos.x)*cell_size.w+hcx,
-                    @intCast(i32, base_pos.y)*cell_size.h+hcy,
-                    @intCast(i32, cur_pos.x)*cell_size.w+hcx,
-                    @intCast(i32, cur_pos.y)*cell_size.h+hcy,
-                );
-
-                prev_dir = new_dir;
-                base_pos = cur_pos;
-            }
-
-            cur_pos = cur_pos.move(new_dir);
-            if (cur_pos.isEqual(goal)) {
-                try renderer.drawLine(
-                    @intCast(i32, base_pos.x)*cell_size.w+hcx,
-                    @intCast(i32, base_pos.y)*cell_size.h+hcy,
-                    @intCast(i32, cur_pos.x)*cell_size.w+hcx,
-                    @intCast(i32, cur_pos.y)*cell_size.h+hcy,
-                );
-
-                break;
-            }
+        for (self.lines.items) |line| {
+            try renderer.drawLine(
+                line.x1, line.y1,
+                line.x2, line.y2,
+            );
         }
-        
     }
 }
 
