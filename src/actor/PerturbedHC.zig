@@ -107,7 +107,7 @@ fn phcDraw(self: *Self, renderer: *Renderer) !void {
     if (self.game.config.draw_ai_data) {
         try renderer.setColorRGBA(5, 252, 240, 90);
 
-        const cell_size = self.game.board.size;
+        const cell_size = self.game.cell_size;
 
         const hcx = @divFloor(cell_size.w, 2);
         const hcy = @divFloor(cell_size.h, 2);

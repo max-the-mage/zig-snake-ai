@@ -41,7 +41,7 @@ pub const Game = struct{
 
     cell_size: Size,
     alloc: *std.mem.Allocator,
-    rand: std.rand.Random,
+    rand: *std.rand.Random,
     snake: Snake,
     config: Config,
     board: Board,
