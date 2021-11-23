@@ -101,10 +101,65 @@ pub fn rect(renderer: *sdl.Renderer, r: sdl.Rectangle) !void {
 
 pub const win = .{.w = 800, .h = 800};
 
-pub const Size = struct {
+// this will be used for the game board once I refactor to remove the arena namespace,
+pub const Game = struct{
+    pub const Config = struct{
+        draw_wireframe: bool,
+        draw_ai_data: bool,
+    };
+
+    pub const Board = struct{
+        pub const State = enum{
+            none,
+            snake,
+            food,
+        };
+
+        grid: []State,
+        food: Pos,
+
+        pub fn cellPtr(x: usize, y: usize) error{OutOfBounds}!*State {
+            if (x >= w) return error.OutOfBounds;
+            if (y >= h) return error.OutOfBounds;
+            return &grid[x+y*w];
+        }
+    };
+
+    size: Size,
+    cell_size: Size,
+    alloc: *std.mem.Allocator,
+    rand: *std.rand.Random,
+    snake: Snake,
+    config: Config,
+    board: Board,
+
+    pub fn init(size: i32, ac: *std.mem.Allocator, cfg: Config) !Game {
+        return Game{
+            .size = .{.w = size, .h = size},
+            .cell_size = .{.w = @divFloor(win.w, size), .h = @divFloor(win.h, size)},
+            .alloc = ac,
+            .rand = std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random(),
+            .snake = Snake{
+                .body = std.ArrayList(Pos).initCapacity(ac, @intCast(usize, size*size)),
+            },
+            .config = cfg,
+            .board = Board{
+                .grid = ac.alloc(Board.State, size*size),
+                .food = Pos{.x=0, .y=0},
+            },
+        };
+    }
+};
+
+pub const Size = struct{
     w: i32,
     h: i32,
+
+    pub fn area(self: *Size) i32 {
+        return w*h;
+    }
 };
+
 
 pub const Dir = enum{
     up,

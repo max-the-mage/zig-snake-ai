@@ -7,7 +7,7 @@ const divT = std.math.divTrunc;
 const ascii = std.ascii;
 const meta = std.meta;
 
-const declInfo = meta.declarationInfo;
+const declInf = meta.declarationInfo;
 
 const sdl = @import("sdl2");
 const clap = @import("clap");
@@ -120,23 +120,22 @@ pub fn main() !void {
         (try arena.getCell(pos.x, pos.y)).* = .snake;
     }
 
-
-    // FIXME: this is still pretty bad, a bit better
-    // but doesn't deinit allocated memory (still working out the defer stuff on that)
-    // might need to do the tagged union meta stuff after all, that way an actor can decide what
-    // to have in it's init function and it'll be properly freed
-    // also I discovered a compiler bug related to breaking a block from inside an inline for loop
-    // also also zig doesn't like casting a zero size type to an opaque type
     const act_str = args.option("--actor");
 
-    var ai: Actor = undefined;
+    //var actor_tag: actor.ActorTag = undefined;
+    var actor_type: actor.ActorType = undefined;
+    var does_allocate = false;
     if (act_str) |ac_real| {
-        inline for (actor.actor_names) |name| {
+        inline for (std.meta.fields(actor.ActorType)) |field| {
             if (
-                ascii.eqlIgnoreCase(name.short, ac_real) or
-                ascii.eqlIgnoreCase(name.long, ac_real)
+                ascii.eqlIgnoreCase(field.name, ac_real) or
+                ascii.eqlIgnoreCase(@typeName(field.field_type), ac_real)
             ) {
-                ai = (try name.Type.init(ac)).actor();
+                const init_args = @typeInfo(declInf(field.field_type, "init").data.Fn.fn_type).Fn.args;
+                if (init_args.len > 0) {
+                    does_allocate = true;
+                    actor_type = @unionInit(actor.ActorType, field.name, try field.field_type.init(ac));
+                } else actor_type = @unionInit(actor.ActorType, field.name, field.field_type.init());
                 break;
             }
         } else {
@@ -150,6 +149,22 @@ pub fn main() !void {
         try _write_types();
         std.os.exit(0);
     }
+    
+    // FIXME: This is the last thing that needs to be cleaned up for easier generic implementations
+    // TODO: figure out a way to go over the types in the switch o
+    var ai: Actor = switch (actor_type) {
+        .phc => |*val| val.*.actor(),
+        .ct => |*val| val.*.actor(),
+        .dhcr => |*val| val.*.actor(),
+        .fr => |*val| val.*.actor(),
+        .zz => |*val| val.*.actor(),
+    };
+
+    defer if (does_allocate) switch (actor_type) {
+        .phc => |*val| val.*.deinit(ac),
+        .zz => |*val| val.*.deinit(ac),
+        else => {},
+    };
 
     arena.newApple();
 
@@ -257,7 +272,7 @@ pub fn main() !void {
 fn _write_types() !void {
     const writer = std.io.getStdErr().writer();
     _ = try writer.write("Currently avaliable actors:\n");
-    inline for (actor.actor_names) |name| {
-        _ = try writer.print("\t{s} or {s}\n", .{name.long, name.short});
+    inline for (meta.fields(actor.ActorType)) |field| {
+        _ = try writer.print("\t{s} or {s}\n", .{field.name, @typeName(field.field_type)});
     }
 }

@@ -16,14 +16,8 @@ const Self = @This();
 
 a: i32,
 
-const Allocator = @import("std").mem.Allocator;
-pub fn init(_: *Allocator) !Self {
+pub fn init() Self {
     return Self{.a = 0};
-}
-
-
-pub fn deinit(_: *Self, _: *Allocator) !void {
-    return;
 }
 
 pub fn actor(self: *Self) Actor {
