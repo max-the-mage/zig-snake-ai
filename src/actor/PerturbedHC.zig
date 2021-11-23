@@ -7,45 +7,47 @@ const act = @import("../actor.zig");
 const Actor = act.Actor;
 const AnyActor = act.AnyActor;
 
-const game = @import("../game.zig");
-const Pos = game.Pos;
-const Dir = game.Dir;
-const arena = game.arena;
+const g = @import("../game.zig");
+const Pos = g.Pos;
+const Dir = g.Dir;
+const Game = g.Game;
 
 const Self = @This();
 
-path: []game.Dir,
-path_order: []usize,
+path: []Dir,
+path_order: []isize,
+game: *Game,
 
-pub fn init(ac: *std.mem.Allocator) !Self {
+pub fn init(game: *Game) !Self {
     var new = Self{
-        .path = try ac.alloc(game.Dir, arena.size),
-        .path_order = try ac.alloc(usize, arena.size),
+        .path = try game.alloc.alloc(Dir, game.board.size.area()),
+        .path_order = try game.alloc.alloc(isize, game.board.size.area()),
+        .game = game,
     };
 
     // create simple hamilton path
     // note: this code only works on evenly sized grids
-    var i: usize  = 0;
-    while (i < arena.w) : (i+= 1) {
+    var i: i32  = 0;
+    while (i < game.board.size.w) : (i+= 1) {
         (try new.getPath(i, 0)).* = .left; // line across top row
-        (try new.getPath(i, arena.h-1)).* = if (i%2==0) .right else .up; // bottom zigzags
+        (try new.getPath(i, game.board.size.h-1)).* = if (@mod(i, 2)==0) .right else .up; // bottom zigzags
 
         // lines up and down
-        var j: usize = 1;
-        while(j < arena.h-1) : (j+=1) {
-            (try new.getPath(i, j)).* = if (i%2==0) .down else .up;
+        var j: i32 = 1;
+        while(j < game.board.size.h-1) : (j+=1) {
+            (try new.getPath(i, j)).* = if (@mod(i, 2)==0) .down else .up;
         }
 
-        if (i > 0 and i < arena.w-1) { // top zigzags
-            (try new.getPath(i, 1)).* = if (i%2==0) .down else .right;
+        if (i > 0 and i < game.board.size.w-1) { // top zigzags
+            (try new.getPath(i, 1)).* = if (@mod(i, 2)==0) .down else .right;
         }
     }
     (try new.getPath(0, 0)).* = .down; // top left corner
 
     { // cycle ordering for skips
         var cur_pos = Pos{.x=0, .y=0};
-        var ordering: usize = 0;
-        while (ordering < arena.size) : (ordering += 1) {
+        var ordering: isize = 0;
+        while (ordering < game.board.size.area()) : (ordering += 1) {
             new.getPathOrder(cur_pos.x, cur_pos.y).* = ordering;
             cur_pos = cur_pos.move((try new.getPath(cur_pos.x, cur_pos.y)).*);
         }
@@ -54,9 +56,9 @@ pub fn init(ac: *std.mem.Allocator) !Self {
     return new;
 }
 
-pub fn deinit(self: *Self, ac: *std.mem.Allocator) void {
-    ac.free(self.path);
-    ac.free(self.path_order);
+pub fn deinit(self: *Self) void {
+    self.game.alloc.free(self.path);
+    self.game.alloc.free(self.path_order);
 }
 
 pub fn actor(self: *Self) Actor {
@@ -65,27 +67,29 @@ pub fn actor(self: *Self) Actor {
 
 fn phcDir(self: *Self, cur_head: Pos) Dir {
 
-    var snake = &arena.snake;
+    var snake = &self.game.snake;
 
     var head = cur_head;
     var tail = snake.body.items[snake.body.items.len-1];
     var dir = (self.getPath(head.x, head.y) catch unreachable).*;
 
-    const dist_apple = self.cycleDistance(&head, &arena.apple);
+    const dist_apple = self.cycleDistance(&head, &self.game.board.food);
     const dist_tail = self.cycleDistance(&head, &tail);
     var dist_next: isize = 1;
     var max_shortcut = @minimum(dist_apple, dist_tail-3);
 
     if (dist_apple < dist_tail) max_shortcut -= 1;
 
-    if (snake.body.items.len > (arena.size*5)/8) max_shortcut = 0; // just follow the path when the board is mostly filled
+    if (snake.body.items.len > (self.game.board.size.area()*5)/8) max_shortcut = 0; // just follow the path when the board is mostly filled
     if (max_shortcut > 0) {
 
         // zig coming in clutch with fancy meta stuff
         for (std.enums.values(Dir)) |new_dir| {
             var b = head.move(new_dir);
 
-            if ((arena.getCell(b.x, b.y) catch &arena.State.snake).* != .snake) {
+            if(b.x < 0 or b.y < 0) continue;
+
+            if ((self.game.board.cellPtr(b.x, b.y) catch &Game.Board.State.snake).* != .snake) {
                 const dist_b = self.cycleDistance(&head, &b);
                 if (dist_b <= max_shortcut and dist_b > dist_next) {
                     dir = new_dir;
@@ -100,10 +104,10 @@ fn phcDir(self: *Self, cur_head: Pos) Dir {
 
 fn phcDraw(self: *Self, renderer: *Renderer) !void {
 
-    if (arena.render_path) {
+    if (self.game.config.draw_ai_data) {
         try renderer.setColorRGBA(5, 252, 240, 90);
 
-        const cell_size = arena.cell_size;
+        const cell_size = self.game.board.size;
 
         const hcx = @divFloor(cell_size.w, 2);
         const hcy = @divFloor(cell_size.h, 2);
@@ -145,16 +149,16 @@ fn phcDraw(self: *Self, renderer: *Renderer) !void {
     }
 }
 
-fn getPath(self: *@This(), x: usize, y: usize) error{OutOfBounds}!*Dir {
-    if (x >= arena.w) return error.OutOfBounds;
-    if (y >= arena.h) return error.OutOfBounds;
-    return &self.path[x+y*arena.w];
+fn getPath(self: *@This(), x: i32, y: i32) error{OutOfBounds}!*Dir {
+    if (x >= self.game.board.size.w) return error.OutOfBounds;
+    if (y >= self.game.board.size.h) return error.OutOfBounds;
+    return &self.path[@intCast(usize, x+y*self.game.board.size.w)];
 }
 
-fn getPathOrder(self: *@This(), x: usize, y: usize) *usize {
+fn getPathOrder(self: *@This(), x: i32, y: i32) *isize {
     // if (x >= w) return error.OutOfBounds;
     // if (y >= h) return error.OutOfBounds;
-    return &self.path_order[x+y*arena.w];
+    return &self.path_order[@intCast(usize, x+y*self.game.board.size.w)];
 }
 
 fn cycleDistance(self: *@This(), a: *Pos, b: *Pos) isize {
@@ -162,5 +166,5 @@ fn cycleDistance(self: *@This(), a: *Pos, b: *Pos) isize {
     const order_b = @intCast(isize, self.getPathOrder(b.x, b.y).*);
     if (order_a < order_b) return order_b - order_a;
     
-    return order_b - order_a + arena.size;
+    return order_b - order_a + @intCast(isize, self.game.board.size.area());
 }

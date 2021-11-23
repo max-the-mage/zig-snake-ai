@@ -8,6 +8,7 @@ const declInf = meta.declarationInfo;
 const Dir = @import("game.zig").Dir;
 const Pos = @import("game.zig").Pos;
 const Renderer = @import("sdl2").Renderer;
+const Game = @import("game.zig").Game;
 
 pub const AnyActor = opaque {};
 pub const Actor = struct {
@@ -29,11 +30,8 @@ pub const Actor = struct {
         assert(trait.hasFn("init")(child));
 
         const init_args = @typeInfo(declInf(child, "init").data.Fn.fn_type).Fn.args;
-        assert(init_args.len == 0 or init_args.len == 1);
-        if (init_args.len == 1) {
-            assert(init_args[0].arg_type.? == *std.mem.Allocator);
-            assert(trait.hasFn("deinit")(child));
-        }
+        assert(init_args.len == 1);
+        assert(init_args[0].arg_type.? == *Game);
 
         const gen = struct {
             const alignment = ptr_info.Pointer.alignment;
