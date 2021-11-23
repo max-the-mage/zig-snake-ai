@@ -23,7 +23,10 @@ pub fn actor(self: *Self) Actor {
     return Actor.init(self, dir, draw);
 }
 
-fn dir(_: *Self, _: Pos) Dir {
+fn dir(s: *Self, p: Pos) Dir {
+    if (p.x == 0 and p.y != s.game.board.size.h-1) return .down;
+    if (p.x == s.game.board.size.w-1 and p.y != 0) return .up;
+    if (p.y == 0 and p.x != 0) return .left;
     return .right;
 }
 

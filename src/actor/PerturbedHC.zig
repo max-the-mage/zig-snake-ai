@@ -113,16 +113,16 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn actor(self: *Self) Actor {
-    return Actor.init(self, phcDir, phcDraw);
+    return Actor.init(self, dir, draw);
 }
 
-fn phcDir(self: *Self, cur_head: Pos) Dir {
+fn dir(self: *Self, cur_head: Pos) Dir {
 
     var snake = &self.game.snake;
 
     var head = cur_head;
     var tail = snake.items[snake.items.len-1];
-    var dir = (self.getPath(head.x, head.y) catch unreachable).*;
+    var ideal_dir = (self.getPath(head.x, head.y) catch unreachable).*;
 
     const dist_apple = self.cycleDistance(&head, &self.game.board.food);
     const dist_tail = self.cycleDistance(&head, &tail);
@@ -143,17 +143,17 @@ fn phcDir(self: *Self, cur_head: Pos) Dir {
             if ((self.game.board.cellPtr(b.x, b.y) catch &Game.Board.State.snake).* != .snake) {
                 const dist_b = self.cycleDistance(&head, &b);
                 if (dist_b <= max_shortcut and dist_b > dist_next) {
-                    dir = new_dir;
+                    ideal_dir = new_dir;
                     dist_next = dist_b;
                 }
             }
         }
     }
 
-    return dir;
+    return ideal_dir;
 }
 
-fn phcDraw(self: *Self, renderer: *Renderer) !void {
+fn draw(self: *Self, renderer: *Renderer) !void {
     if (self.game.config.draw_ai_data) {
         try renderer.setColorRGBA(5, 252, 240, 90);
 

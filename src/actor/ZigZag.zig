@@ -102,17 +102,14 @@ pub fn deinit(self: *Self) void {
 }
 
 pub fn actor(self: *Self) Actor {
-    return Actor.init(self, zzDir, zzDraw);
+    return Actor.init(self, dir, draw);
 }
 
-fn zzDir(self: *Self, cur_head: Pos) Dir {
-    var head = cur_head;
-    var dir = (self.getPath(head.x, head.y) catch unreachable).*;
-
-    return dir;
+fn dir(self: *Self, cur_head: Pos) Dir {
+    return (self.getPath(cur_head.x, cur_head.y) catch unreachable).*;
 }
 
-fn zzDraw(self: *Self, renderer: *Renderer) !void {
+fn draw(self: *Self, renderer: *Renderer) !void {
 
     if (self.game.config.draw_ai_data) {
         try renderer.setColorRGBA(5, 252, 240, 90);
