@@ -9,6 +9,7 @@ const act = @import("../actor.zig");
 const Actor = act.Actor;
 
 const game = @import("../game.zig");
+const Game = game.Game;
 const Pos = game.Pos;
 const Dir = game.Dir;
 const arena = game.arena;
@@ -78,7 +79,7 @@ pub fn init(ac: *std.mem.Allocator) !Self {
             }
 
             cur_pos = cur_pos.move(new_dir);
-            if (cur_pos.isEqual(&goal)) {
+            if (cur_pos.isEqual(goal)) {
                 try new.lines.append(.{
                     .x1=@intCast(i32, base_pos.x)*cell_size.w+hcx,
                     .y1=@intCast(i32, base_pos.y)*cell_size.h+hcy,

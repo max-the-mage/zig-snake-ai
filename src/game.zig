@@ -44,7 +44,7 @@ pub const arena = struct {
     pub fn draw(renderer: *sdl.Renderer) !void {
 
         try renderer.setColorRGB(0xf5, 0x00, 0x00);
-        try rect(renderer, sdl.Rectangle{
+        try rect(wireframe, renderer, sdl.Rectangle{
             .x = @intCast(i32, apple.x)*cell_size.w+(try divC(i32, cell_size.w, 4)),
             .y = @intCast(i32, apple.y)*cell_size.h+(try divC(i32, cell_size.h, 4)),
             .width = try divC(i32, cell_size.w, 2),
@@ -90,8 +90,8 @@ pub const arena = struct {
     }
 };
 
-pub fn rect(renderer: *sdl.Renderer, r: sdl.Rectangle) !void {
-    if (arena.wireframe) {
+pub fn rect(wireframe: bool, renderer: *sdl.Renderer, r: sdl.Rectangle) !void {
+    if (wireframe) {
         try renderer.drawRect(r);
     } else {
         try renderer.fillRect(r);
@@ -134,7 +134,7 @@ pub const Game = struct{
     board: Board,
 
     pub fn init(size: i32, ac: *std.mem.Allocator, cfg: Config) !Game {
-        return Game{
+        var new_game = Game{
             .cell_size = .{.w = @divFloor(win.w, size), .h = @divFloor(win.h, size)},
             .alloc = ac,
             .rand = std.rand.DefaultPrng.init(@intCast(u64, std.time.milliTimestamp())).random(),
@@ -148,6 +148,239 @@ pub const Game = struct{
                 .food = Pos{.x=0, .y=0},
             },
         };
+        new_game.snake.body.items[0] = .{.x = 0, .y = 0};
+        new_game.newApple();
+
+        return new_game;
+    }
+
+    pub fn reset(self: *Game) void {
+        self.snake.body.clearRetainingCapacity();
+        for (self.board.grid) |*cell| {
+            cell.* = .none;
+        }
+        self.snake.body.append(.{.x = 0, .y = 0});
+        self.newApple();
+    }
+
+    pub fn deinit(self: *Game) void {
+        self.alloc.free(self.board.grid);
+        self.snake.body.deinit();
+    }
+
+    pub fn draw(self: *Game, renderer: *sdl.Renderer, act: *const Actor) !void {
+        { // draw apple
+            try renderer.setColorRGB(0xf5, 0x00, 0x00);
+            try rect(self.config.draw_wireframe, renderer, sdl.Rectangle{
+                .x = @intCast(i32, self.board.food)*self.board.size.w+(try divC(i32, self.board.size.w, 4)),
+                .y = @intCast(i32, self.board.food)*self.board.size.h+(try divC(i32, self.board.size.h, 4)),
+                .width = try divC(i32, self.board.size.w, 2),
+                .height = try divC(i32, self.board.size.h, 2),
+            });
+        }
+
+        { // draw lines
+            try renderer.setColorRGBA(127, 127, 127, 90);
+            var c: i32 = 0;
+            var r: i32 = 0;
+
+            while (c < self.board.size.w+1) : (c += 1) {
+                try renderer.drawLine(c*self.board.size.w, 0, c*self.board.size.w, win.h);
+            }
+            while (r < self.board.size.h+1) : (r += 1) {
+                try renderer.drawLine(0, r*self.board.size.h, win.w, r*self.board.size.h);
+            }
+        }
+        { // draw snake
+            const cell_size = self.cell_size;
+            const hcx = @divFloor(cell_size.w, 2);
+            const hcy = @divFloor(cell_size.h, 2);
+
+            if (self.config.draw_ai_data.render_path) {
+                try act.draw(renderer);
+
+                var cur_pos = self.snake.body.items[0];
+                var base_pos = cur_pos;
+                var prev_dir: Dir = undefined;
+
+                try renderer.setColorRGBA(0xfc, 0x74, 0x19, 0xf5);
+
+                while (!cur_pos.isEqual(self.board.food)) {
+
+                    const ideal_dir = act.dir(cur_pos);
+
+                    if (ideal_dir != prev_dir) {
+                        try renderer.drawLine(
+                            @intCast(i32, base_pos.x)*cell_size.w+hcx,
+                            @intCast(i32, base_pos.y)*cell_size.h+hcy,
+                            @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                            @intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                        );
+
+                        base_pos = cur_pos;
+                        prev_dir = ideal_dir;
+                    }
+
+                    cur_pos = cur_pos.move(ideal_dir);
+                    if (cur_pos.isEqual(self.board.food)) {
+                        try renderer.drawLine(
+                            @intCast(i32, base_pos.x)*cell_size.w+hcx,
+                            @intCast(i32, base_pos.y)*cell_size.h+hcy,
+                            @intCast(i32, cur_pos.x)*cell_size.w+hcx,
+                            @intCast(i32, cur_pos.y)*cell_size.h+hcy,
+                        );
+                    }
+
+                }
+            }
+
+            //3/4 of cell size;
+            const fx = (try divT(i32, cell_size.w, 8));
+            const fy = (try divT(i32, cell_size.h, 8));
+
+            const cx = fx*6;
+            const cy = fy*6;
+
+            var prev: ?Pos = null;
+
+            var cur_pos: Pos = self.snake.body.items[0];
+            var cur_dir: Dir = undefined;
+
+            var col = sdl.Color.rgb(0, 255, 0);
+
+            var con_tail = false;
+
+            for (self.snake.body.items) |_, i| {
+                var seg = self.snake.body.items[i];
+
+                try renderer.setColor(col);
+
+                if (i != self.snake.body.items.len-1) {
+                    var next = self.snake.body.items[i+1];
+
+                    const diff_x = @intCast(isize, next.x) - @intCast(isize, seg.x);
+                    const diff_y = @intCast(isize, next.y) - @intCast(isize, seg.y);
+
+                    var dir_next: Dir = undefined;
+
+                    dir_next = switch (diff_x) {
+                        -1 => .left,
+                        1 => .right,
+                        else => .up
+                    };
+                    if(dir_next != .left and dir_next != .right) {
+                        dir_next = switch (diff_y) {
+                            -1 => .up,
+                            1 => .down,
+                            else => .down,
+                        };
+                    }
+                    
+                    if (i == 0) {
+                        cur_pos = seg;
+                        cur_dir = dir_next;
+                    }
+
+                    if (cur_dir != dir_next or i == self.snake.body.items.len-2) {
+
+                        // incorporate tail into final segment                    
+                        if (i == self.snake.body.items.len-2) {
+                            if (cur_dir == dir_next) seg = self.snake.body.items[self.snake.body.items.len-1]
+                            else con_tail=true;
+                        }
+                        
+                        try rect(self.config.draw_wireframe, renderer, switch (cur_dir) {
+                            .left => .{
+                                .x = @intCast(i32, seg.x)*cell_size.w+(fx*7),
+                                .y = fy+@intCast(i32, seg.y)*cell_size.h,
+                                .width = (@intCast(i32, cur_pos.x) - @intCast(i32, seg.x))*cell_size.w,
+                                .height = cy,
+                            },
+                            .right => .{
+                                .x = fx+@intCast(i32, cur_pos.x)*cell_size.w,
+                                .y = fy+@intCast(i32, cur_pos.y)*cell_size.h,
+                                .width = (@intCast(i32, seg.x) - @intCast(i32, cur_pos.x))*cell_size.w,
+                                .height = cy,
+                            },
+                            .up => .{
+                                .x = fx+@intCast(i32, seg.x)*cell_size.w,
+                                .y = @intCast(i32, seg.y)*cell_size.h+(fy*7),
+                                .width = cx,
+                                .height = (@intCast(i32, cur_pos.y) - @intCast(i32, seg.y))*cell_size.h,
+                            },
+                            .down => .{
+                                .x = fx+@intCast(i32, cur_pos.x)*cell_size.w,
+                                .y = fy+@intCast(i32, cur_pos.y)*cell_size.h,
+                                .width = cx,
+                                .height = (@intCast(i32, seg.y) - @intCast(i32, cur_pos.y))*cell_size.h,
+                            },
+                        });
+
+                        cur_pos = seg;
+                        cur_dir = dir_next;
+                    }
+                } else {
+                    const h = @boolToInt((cur_dir == .left or cur_dir == .right) and con_tail);
+                    const v = @boolToInt((cur_dir == .up or cur_dir == .down) and con_tail);
+
+                    try rect(self.config.draw_wireframe, renderer, .{
+                        .x=fx+@intCast(i32, if(cur_dir==.right) cur_pos.x else seg.x)*cell_size.w,
+                        .y=fy+@intCast(i32, if(cur_dir==.down) cur_pos.y else seg.y)*cell_size.h,
+                        .width=cx+cell_size.w*h,
+                        .height=cy+cell_size.h*v,
+                    });
+                }
+
+                prev = seg;
+            }
+        }
+    }
+
+    pub fn newApple(self: *Game) void {
+        var new_pos = self.rand.uintLessThan(usize, @as(usize,self.board.size.area()));
+
+        var left = self.rand.boolean();
+
+        const orig = new_pos;
+
+        var iter: usize = 0;
+        while (self.board.grid[new_pos] == .snake) : (iter += 1) {
+            if(iter == self.board.size.area()) return; // loop board is full, give up
+            if (left) {
+                if(new_pos == 0){left=false;new_pos=orig;}
+                else new_pos -= 1;
+            } else {
+                if(new_pos == self.board.size.area()-1) {left=true;new_pos=orig;}
+                else new_pos += 1;
+            }
+        }
+
+        self.board.grid[new_pos] = .food;
+
+        self.board.apple = .{.x = new_pos % self.board.size.w, .y = new_pos/self.board.size.h};
+    }
+
+    pub fn step(self: *Game, act: *const Actor) void {
+        var slice = self.snake.body.items;
+        var tail = slice[slice.len-1];
+
+        var head = &slice[0];
+        var prev = slice[0];
+
+        head.* = head.move(act.dir(prev));
+
+        for (slice[1..]) |*item| {
+            std.mem.swap(Pos, item, &prev); // no more accidental pointer conundrums
+        }
+
+        // update grid with new cell head
+        (try self.board.celPtr(head.x, head.y)).* = .snake;
+
+        if (head.isEqual(self.board.food)) { 
+            try self.snake.body.append(tail);
+            if (self.snake.body.items.len < self.board.size.area()) self.newApple();
+        }
+        else (try self.board.cellPtr(tail.x, tail.y)).* = .none; // remove the tail from the grid
     }
 };
 
@@ -155,7 +388,7 @@ pub const Size = struct{
     w: i32,
     h: i32,
 
-    pub fn area(self: *Size) i32 {
+    pub fn area(self: Size) i32 {
         return self.w*self.h;
     }
 };
@@ -172,7 +405,7 @@ pub const Pos = struct {
     x: usize,
     y: usize,
 
-    pub fn isEqual(a: *Pos, b: *Pos) bool {
+    pub fn isEqual(a: Pos, b: Pos) bool {
         return a.x == b.x and a.y == b.y;
     }
 
@@ -209,7 +442,7 @@ pub const Snake = struct {
         // update grid with new cell head
         (try arena.getCell(head.x, head.y)).* = .snake;
 
-        if (head.isEqual(&arena.apple)) { 
+        if (head.isEqual(arena.apple)) { 
             try snake.body.append(tail);
             if (snake.body.items.len < arena.size) arena.newApple();
         }
@@ -230,7 +463,7 @@ pub const Snake = struct {
 
             try renderer.setColorRGBA(0xfc, 0x74, 0x19, 0xf5);
 
-            while (!cur_pos.isEqual(&arena.apple)) {
+            while (!cur_pos.isEqual(arena.apple)) {
 
                 const ideal_dir = actor.dir(cur_pos);
 
@@ -247,7 +480,7 @@ pub const Snake = struct {
                 }
 
                 cur_pos = cur_pos.move(ideal_dir);
-                if (cur_pos.isEqual(&arena.apple)) {
+                if (cur_pos.isEqual(arena.apple)) {
                     try renderer.drawLine(
                         @intCast(i32, base_pos.x)*cell_size.w+hcx,
                         @intCast(i32, base_pos.y)*cell_size.h+hcy,
@@ -314,7 +547,7 @@ pub const Snake = struct {
                         else con_tail=true;
                     }
                     
-                    try rect(renderer, switch (cur_dir) {
+                    try rect(arena.wireframe, renderer, switch (cur_dir) {
                         .left => .{
                             .x = @intCast(i32, seg.x)*cell_size.w+(fx*7),
                             .y = fy+@intCast(i32, seg.y)*cell_size.h,
@@ -348,7 +581,7 @@ pub const Snake = struct {
                 const h = @boolToInt((cur_dir == .left or cur_dir == .right) and con_tail);
                 const v = @boolToInt((cur_dir == .up or cur_dir == .down) and con_tail);
 
-                try rect(renderer, .{
+                try rect(arena.wireframe, renderer, .{
                     .x=fx+@intCast(i32, if(cur_dir==.right) cur_pos.x else seg.x)*cell_size.w,
                     .y=fy+@intCast(i32, if(cur_dir==.down) cur_pos.y else seg.y)*cell_size.h,
                     .width=cx+cell_size.w*h,

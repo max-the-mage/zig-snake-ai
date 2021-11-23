@@ -130,7 +130,7 @@ fn phcDraw(self: *Self, renderer: *Renderer) !void {
             }
 
             cur_pos = cur_pos.move(new_dir);
-            if (cur_pos.isEqual(&goal)) {
+            if (cur_pos.isEqual(goal)) {
                 try renderer.drawLine(
                     @intCast(i32, base_pos.x)*cell_size.w+hcx,
                     @intCast(i32, base_pos.y)*cell_size.h+hcy,
