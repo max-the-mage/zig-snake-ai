@@ -5,7 +5,7 @@ deps:
       ref: master
       root: src/lib.zig
   clap:
-    git:
+gyr    git:
       url: "https://github.com/Hejsil/zig-clap.git"
       ref: zig-master
       root: clap.zig

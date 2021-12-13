@@ -14,13 +14,27 @@ pub fn rect(wireframe: bool, renderer: *sdl.Renderer, r: sdl.Rectangle) !void {
     if (wireframe) try renderer.drawRect(r) else try renderer.fillRect(r);
 }
 
-// this will be used for the game board once I refactor to remove the arena namespace,
+pub fn Grid(comptime T: type) type {
+    return struct {
+        const Self = @This();
+
+        size: Size,
+        items: []T,
+
+        pub fn cellPtr(self: *@This(), x: i32, y: i32) error{OutOfBounds}!*T {
+            if (x >= self.size.w) return error.OutOfBounds;
+            if (y >= self.size.h) return error.OutOfBounds;
+            return &self.grid[@intCast(usize, x+y*self.size.w)];
+        }
+    };
+}
+
 pub const Game = struct{
     pub const Config = struct{
         draw_wireframe: bool,
         draw_ai_data: bool,
     };
-
+    
     pub const Board = struct{
         pub const State = enum{
             none,
@@ -40,13 +54,13 @@ pub const Game = struct{
     };
 
     cell_size: Size,
-    alloc: *std.mem.Allocator,
+    alloc: std.mem.Allocator,
     rand: *std.rand.Random,
     snake: std.ArrayList(Pos),
     config: Config,
     board: Board,
 
-    pub fn init(size: i32, ac: *std.mem.Allocator, r: *std.rand.Random, cfg: Config) !Game {
+    pub fn init(size: i32, ac: std.mem.Allocator, r: *std.rand.Random, cfg: Config) !Game {
         var new_game = Game{
             .cell_size = .{.w = @divTrunc(win.w, size), .h = @divTrunc(win.h, size)},
             .alloc = ac,

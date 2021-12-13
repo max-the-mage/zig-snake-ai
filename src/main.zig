@@ -14,7 +14,6 @@ const declInf = meta.declarationInfo;
 
 const sdl = @import("sdl2");
 const clap = @import("clap");
-const adma = @import("adma");
 
 const clock = @import("zgame_clock");
 const Time = clock.Time;
@@ -32,13 +31,11 @@ const Game = g.Game;
 const rect = g.rect;
 
 pub fn main() !void {
-    // var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    // defer _ = gpa.deinit();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer _ = gpa.deinit();
 
-    const adma_ref = adma.AdmaAllocator.init();
-    defer adma_ref.deinit();
 
-    const ac = &adma_ref.allocator;
+    const ac = gpa.allocator();
 
     const params = comptime [_]clap.Param(clap.Help){
         try clap.parseParam("-h, --help Display this and exit"),
