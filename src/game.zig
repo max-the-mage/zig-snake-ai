@@ -24,7 +24,7 @@ pub fn Grid(comptime T: type) type {
         pub fn cellPtr(self: *@This(), x: i32, y: i32) error{OutOfBounds}!*T {
             if (x >= self.size.w) return error.OutOfBounds;
             if (y >= self.size.h) return error.OutOfBounds;
-            return &self.grid[@intCast(usize, x+y*self.size.w)];
+            return &self.items[@intCast(usize, x+y*self.size.w)];
         }
     };
 }

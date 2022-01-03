@@ -24,23 +24,26 @@ pub const Actor = struct {
         const Ptr = @TypeOf(pointer);
         const ptr_info = @typeInfo(Ptr);
         const child = ptr_info.Pointer.child;
+        
+        // must be a single item pointer to a struct, and must contain an `init` function
         assert(ptr_info == .Pointer);
         assert(ptr_info.Pointer.size == .One);
         assert(@typeInfo(child) == .Struct);
         assert(trait.hasFn("init")(child));
 
+        // init function must take in a pointer to a game instance and nothing else
         const init_args = @typeInfo(declInf(child, "init").data.Fn.fn_type).Fn.args;
         assert(init_args.len == 1);
         assert(init_args[0].arg_type.? == *Game);
 
+        // avoids forcing user to do pointer alignment
+        // stole this from the Random interface in std
         const gen = struct {
             const alignment = ptr_info.Pointer.alignment;
-            
             fn dir(ptr: *AnyActor, p: Pos) Dir {
                 const self = @ptrCast(Ptr, @alignCast(alignment, ptr));
                 return dirFn(self, p);
             }
-
             fn draw(ptr: *AnyActor, r: *Renderer) anyerror!void {
                 const self = @ptrCast(Ptr, @alignCast(alignment, ptr));
                 return drawFn(self, r);
