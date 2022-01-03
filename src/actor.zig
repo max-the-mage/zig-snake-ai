@@ -4,7 +4,6 @@ const meta = std.meta;
 const trait = meta.trait;
 const declInf = meta.declarationInfo;
 
-
 const Dir = @import("game.zig").Dir;
 const Pos = @import("game.zig").Pos;
 const Renderer = @import("sdl2").Renderer;
@@ -17,14 +16,14 @@ pub const Actor = struct {
     drawFn: fn (*AnyActor, *Renderer) anyerror!void,
 
     pub fn init(
-        pointer: anytype, 
-        comptime dirFn: fn (@TypeOf(pointer), Pos) Dir, 
+        pointer: anytype,
+        comptime dirFn: fn (@TypeOf(pointer), Pos) Dir,
         comptime drawFn: fn (@TypeOf(pointer), *Renderer) anyerror!void
     ) Actor {
         const Ptr = @TypeOf(pointer);
         const ptr_info = @typeInfo(Ptr);
         const child = ptr_info.Pointer.child;
-        
+
         // must be a single item pointer to a struct, and must contain an `init` function
         assert(ptr_info == .Pointer);
         assert(ptr_info.Pointer.size == .One);
@@ -71,13 +70,13 @@ const decls = std.meta.declarations;
 fn getShorthand(comptime T: type) []const u8 {
     var base = @as([]const u8, "");
 
-    for(@typeName(T)) |chr| {
+    for (@typeName(T)) |chr| {
         if (std.ascii.isUpper(chr)) base = base ++ [1]u8{std.ascii.toLower(chr)};
     }
     return base;
 }
 
-const impls = struct{
+const impls = struct {
     pub const PerturbedHC = @import("actor/PerturbedHC.zig");
     pub const ZigZag = @import("actor/ZigZag.zig");
     pub const DynamicHCRepair = @import("actor/DynamicHCRepair.zig");
@@ -90,7 +89,7 @@ const decl_list = decls(impls);
 
 const TypeInfo = std.builtin.TypeInfo;
 
-pub const ActorTag = @Type(.{.Enum=.{
+pub const ActorTag = @Type(.{ .Enum = .{
     .layout = .Auto,
     .tag_type = u32,
     .fields = blk: {
@@ -107,10 +106,10 @@ pub const ActorTag = @Type(.{.Enum=.{
     },
     .decls = &[_]TypeInfo.Declaration{},
     .is_exhaustive = true,
-}});
+} });
 
 // TODO: fix this when @Type can resolve tagged unions
-const ActorRef = union(enum) {temp};
+const ActorRef = union(enum) { temp };
 pub const ActorType = type_blk: {
     var info = @typeInfo(ActorRef);
     info.Union.tag_type = ActorTag;

@@ -28,7 +28,6 @@ const Self = @This();
 game: *Game,
 cell_parents: g.Grid(Pos),
 
-
 pub fn init(game: *Game) !Self {
     return Self{
         .game = game,
@@ -43,26 +42,25 @@ pub fn actor(self: *Self) Actor {
 }
 
 fn dir(s: *Self, p: Pos) Dir {
-    if (p.x == 0 and p.y != s.game.board.size.h-1) return .down;
-    if (p.x == s.game.board.size.w-1 and p.y != 0) return .up;
+    if (p.x == 0 and p.y != s.game.board.size.h - 1) return .down;
+    if (p.x == s.game.board.size.w - 1 and p.y != 0) return .up;
     if (p.y == 0 and p.x != 0) return .left;
     return .right;
 }
 
 fn draw(_: *Self, _: *Renderer) !void {
-
     return;
 }
 
 fn cellFromPos(p: Pos) Pos {
     return Pos{
-        .x=@divTrunc(p.x, 2),
-        .y=@divTrunc(p.y, 2),
+        .x = @divTrunc(p.x, 2),
+        .y = @divTrunc(p.y, 2),
     };
 }
 
-const unvisited = Pos{.x=-1,.y=-1};
-const root = Pos{.x=-2, .y=-2};
+const unvisited = Pos{ .x = -1, .y = -1 };
+const root = Pos{ .x = -2, .y = -2 };
 
 fn cellTreeParents(s: *Self) !g.Grid(Pos) {
     var parents = g.Grid(Pos){
@@ -78,9 +76,9 @@ fn cellTreeParents(s: *Self) !g.Grid(Pos) {
     var parent = root;
 
     for (s.game.snake.items) |_, i| {
-        const c = s.game.snake.items[s.game.snake.items.len-(i+1)];
+        const c = s.game.snake.items[s.game.snake.items.len - (i + 1)];
         const cell_pos = cellFromPos(c);
-        
+
         if ((try parents.cellPtr(cell_pos.x, cell_pos.y)).*.isEqual(unvisited)) {
             (try parents.cellPtr(cell_pos.x, cell_pos.y)).* = parent;
         }
@@ -97,8 +95,7 @@ fn canMoveInTree(s: *Self, a: Pos, b: Pos, d: Dir) bool {
     // condition 2 (only move to parent or unvisited);
     const cell_a = cellFromPos(a);
     const cell_b = cellFromPos(b);
-    return
-        cell_b.isEqual(cell_a) or 
+    return cell_b.isEqual(cell_a) or
         (s.cell_parents.cellPtr(cell_b.x, cell_b.y) catch unreachable).*.isEqual(unvisited) or
         (s.cell_parents.cellPtr(cell_a.x, cell_a.y) catch unreachable).*.isEqual(cell_b);
 }

@@ -21,7 +21,6 @@ pub fn build(b: *std.build.Builder) void {
     exe.addPackage(sdk.getWrapperPackage("sdl2")); // this links libc
     exe.addPackage(pkgs.clap);
     exe.addPackage(pkgs.zgame_clock);
-    exe.addPackage(pkgs.adma);
     exe.setBuildMode(mode);
     exe.install();
 

@@ -18,7 +18,7 @@ const Self = @This();
 game: *Game,
 
 pub fn init(game: *Game) !Self {
-    return Self{.game = game};
+    return Self{ .game = game };
 }
 pub fn deinit(_: *Self) void {}
 
@@ -27,13 +27,12 @@ pub fn actor(self: *Self) Actor {
 }
 
 fn dir(s: *Self, p: Pos) Dir {
-    if (p.x == 0 and p.y != s.game.board.size.h-1) return .down;
-    if (p.x == s.game.board.size.w-1 and p.y != 0) return .up;
+    if (p.x == 0 and p.y != s.game.board.size.h - 1) return .down;
+    if (p.x == s.game.board.size.w - 1 and p.y != 0) return .up;
     if (p.y == 0 and p.x != 0) return .left;
     return .right;
 }
 
 fn draw(_: *Self, _: *Renderer) !void {
-    
     return;
 }

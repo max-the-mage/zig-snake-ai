@@ -1,21 +1,16 @@
 deps:
+  clap:
+    git:
+      url: "https://github.com/Hejsil/zig-clap.git"
+      ref: master
+      root: clap.zig
   SDL:
     git:
       url: "https://github.com/MasterQ32/SDL.zig.git"
       ref: master
       root: src/lib.zig
-  clap:
-gyr    git:
-      url: "https://github.com/Hejsil/zig-clap.git"
-      ref: zig-master
-      root: clap.zig
   zgame_clock:
     git:
       url: "https://github.com/jojolepro/zgame_clock.git"
       ref: main
       root: src/main.zig
-  adma:
-    git:
-      url: "https://github.com/suirad/adma.git"
-      ref: master
-      root: src/adma.zig
