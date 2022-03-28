@@ -31,7 +31,7 @@ pub const Actor = struct {
         assert(trait.hasFn("init")(child));
 
         // init function must take in a pointer to a game instance and nothing else
-        const init_args = @typeInfo(declInf(child, "init").data.Fn.fn_type).Fn.args;
+        const init_args = @typeInfo(@TypeOf(@field(child, "init"))).Fn.args;
         assert(init_args.len == 1);
         assert(init_args[0].arg_type.? == *Game);
 
@@ -97,7 +97,7 @@ pub const ActorTag = @Type(.{ .Enum = .{
 
         inline for (decl_list) |decl, i| {
             field_arr[i] = TypeInfo.EnumField{
-                .name = getShorthand(decl.data.Type),
+                .name = getShorthand(@field(impls, decl.name)),
                 .value = i,
             };
         }
@@ -118,9 +118,9 @@ pub const ActorType = type_blk: {
 
         inline for (decl_list) |decl, i| {
             field_arr[i] = TypeInfo.UnionField{
-                .name = getShorthand(decl.data.Type),
-                .field_type = decl.data.Type,
-                .alignment = @alignOf(decl.data.Type),
+                .name = getShorthand(@field(impls, decl.name)),
+                .field_type = @field(impls, decl.name),
+                .alignment = @alignOf(@field(impls, decl.name)),
             };
         }
 

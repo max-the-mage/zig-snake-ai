@@ -36,38 +36,38 @@ pub fn main() !void {
 
     const ac = gpa.allocator();
 
-    const params = comptime [_]clap.Param(clap.Help){
-        try clap.parseParam("-h, --help Display this and exit"),
-        try clap.parseParam("-a, --actor <STR> Chose an actor,"),
-        try clap.parseParam("-s, --size <NUM> Snake board size"),
-        try clap.parseParam("-p, --paths Enable path rendering"),
-        try clap.parseParam("-w, --wireframe Render snake body outlines"),
-        try clap.parseParam("-b, --benchmark <NUM> Do render free benchmarking based on # of iterations"),
-        try clap.parseParam("-f, --fast Disable vsync to run as fast as possible"),
-        try clap.parseParam("-i, --interval <NUM> Interval of fps/benchmark messages in seconds"),
-    };
+    const params = comptime clap.parseParamsComptime(
+        \\-h, --help Display this and exit
+        \\-a, --actor <str> Chose an actor,
+        \\-s, --size <i32> Snake board size
+        \\-p, --paths Enable path rendering
+        \\-w, --wireframe Render snake body outlines
+        \\-b, --benchmark <usize> Do render free benchmarking based on # of iterations
+        \\-f, --fast Disable vsync to run as fast as possible
+        \\-i, --interval <f64> Interval of fps/benchmark messages in seconds
+    );
 
-    var args = try clap.parse(clap.Help, &params, .{});
-    defer args.deinit();
+    var res = try clap.parse(clap.Help, &params, clap.parsers.default, .{});
+    defer res.deinit();
 
-    if (args.flag("--help")) {
-        try clap.help(std.io.getStdErr().writer(), &params);
+    if (res.args.help) {
+        try clap.help(std.io.getStdErr().writer(), clap.Help, &params);
         try _write_types();
         std.os.exit(0);
     }
 
-    const benchmark = try std.fmt.parseUnsigned(usize, args.option("--benchmark") orelse "0", 10);
+    const benchmark = res.args.benchmark orelse 0;
 
-    const interval = try std.fmt.parseFloat(f64, args.option("--interval") orelse "1.0");
+    const interval = res.args.interval orelse 1.0;
 
-    const size = try std.fmt.parseUnsigned(i32, args.option("--size") orelse "20", 10);
+    const size = res.args.size orelse 20;
     var game = try Game.init(
         size,
         ac,
         &DefaultPrng.init(@intCast(u64, mts())).random(),
         Game.Config{
-            .draw_wireframe = args.flag("--wireframe"),
-            .draw_ai_data = args.flag("--paths"),
+            .draw_wireframe = res.args.wireframe,
+            .draw_ai_data = res.args.paths,
         },
     );
     defer game.deinit();
@@ -96,11 +96,11 @@ pub fn main() !void {
             .{ .shown = true },
         );
 
-        renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = !args.flag("--fast") });
+        renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = !res.args.fast });
         try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
     }
 
-    const act_str = args.option("--actor");
+    const act_str = res.args.actor;
 
     //var actor_tag: actor.ActorTag = undefined;
     var actor_type: actor.ActorType = undefined;
@@ -120,7 +120,7 @@ pub fn main() !void {
         }
     } else {
         std.log.err("an actor must be specified", .{});
-        try clap.help(std.io.getStdErr().writer(), &params);
+        try clap.help(std.io.getStdErr().writer(), clap.Help, &params);
         try _write_types();
         std.os.exit(0);
     }
@@ -187,7 +187,7 @@ pub fn main() !void {
             time.advance_frame(cur_lap);
             if (time.step_fixed_update())
                 std.log.err("run: {}, steps: {} time: {d:.4}ms steps/apple: {d:.2}", .{
-                    iterations,                                                             steps, tf,
+                    iterations, steps, tf,
                     @intToFloat(f32, steps + 1) / @intToFloat(f32, game.board.size.area()),
                 });
             if (iterations == benchmark) break :mainLoop;
@@ -225,10 +225,14 @@ pub fn main() !void {
     }
     dev /= @intToFloat(f64, iterations);
 
-    std.log.err("summary\n\tboard size: {}x{}, actor: {s}\n\ttime: {d:.4}s\n\titerations: {}\n\taverage steps: {d:.2}\n\tcycles/s: {d:.0}\n\tavg run: {d:.4}ms ±{d:.4}", .{
-        game.board.size.w,                                            game.board.size.h,                          act_str,  t / 1000, iterations,
-        @intToFloat(f64, total_steps) / @intToFloat(f64, iterations), @intToFloat(f64, total_steps) / (t / 1000), avg_time, dev,
-    });
+    std.log.err(
+        "summary\n\tboard size: {}x{}, actor: {s}\n\ttime: {d:.4}s\n\titerations: {}\n\taverage steps: {d:.2}\n\tcycles/s: {d:.0}\n\tavg run: {d:.4}ms ±{d:.4}", 
+        .{
+            game.board.size.w, game.board.size.h, act_str, t/1000, iterations,
+            @intToFloat(f64, total_steps)/@intToFloat(f64, iterations),
+            @intToFloat(f64, total_steps)/(t/1000), avg_time, dev,
+        }
+    );
 }
 
 fn _write_types() !void {
