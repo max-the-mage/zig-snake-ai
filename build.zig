@@ -1,5 +1,5 @@
 const std = @import("std");
-const Sdk = @import(".gyro\\SDL.zig-MasterQ32-github.com-4ca8e851\\pkg\\Sdk.zig");
+const Sdk = @import(".gyro\\SDL.zig-MasterQ32-github.com-360e5ea1\\pkg\\Sdk.zig");
 const pkgs = @import("deps.zig").pkgs;
 
 pub fn build(b: *std.build.Builder) void {

@@ -129,3 +129,23 @@ pub const ActorType = type_blk: {
 
     break :type_blk @Type(info);
 };
+
+// replace with this when @Type can resolve tagged unions
+// pub const ActorType = @Type(.{ .Union = .{
+//     .layout = .Auto,
+//     .tag_type = ActorTag,
+//     .fields = blk: {
+//         var field_arr: [decl_list.len]TypeInfo.UnionField = undefined;
+
+//         inline for (decl_list) |decl, i| {
+//             field_arr[i] = TypeInfo.UnionField{
+//                 .name = getShorthand(@field(impls, decl.name)),
+//                 .field_type = @field(impls, decl.name),
+//                 .alignment = @alignOf(@field(impls, decl.name)),
+//             };
+//         }
+
+//         break :blk &field_arr;
+//     },
+//     .decls = &[_]TypeInfo.Declaration{},
+// }});

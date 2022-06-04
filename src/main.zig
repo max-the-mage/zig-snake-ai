@@ -16,7 +16,7 @@ const sdl = @import("sdl2");
 const clap = @import("clap");
 
 const clock = @import("zgame_clock");
-const Time = clock.Time;
+const Time = clock.Time.Time;
 
 const g = @import("game.zig");
 const actor = @import("actor.zig");
@@ -51,7 +51,7 @@ pub fn main() !void {
     defer res.deinit();
 
     if (res.args.help) {
-        try clap.help(std.io.getStdErr().writer(), clap.Help, &params);
+        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
         try _write_types();
         std.os.exit(0);
     }
@@ -97,7 +97,7 @@ pub fn main() !void {
         );
 
         renderer = try sdl.createRenderer(window, null, .{ .accelerated = true, .present_vsync = !res.args.fast });
-        try renderer.setDrawBlendMode(sdl.c.SDL_BLENDMODE_BLEND);
+        try renderer.setDrawBlendMode(.blend);
     }
 
     const act_str = res.args.actor;
@@ -120,7 +120,7 @@ pub fn main() !void {
         }
     } else {
         std.log.err("an actor must be specified", .{});
-        try clap.help(std.io.getStdErr().writer(), clap.Help, &params);
+        try clap.help(std.io.getStdErr().writer(), clap.Help, &params, .{});
         try _write_types();
         std.os.exit(0);
     }
@@ -221,7 +221,7 @@ pub fn main() !void {
     var dev: f64 = 0;
 
     for (run_times) |curt| {
-        dev += std.math.absFloat(curt - avg_time);
+        dev += std.math.fabs(curt - avg_time);
     }
     dev /= @intToFloat(f64, iterations);
 
